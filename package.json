@@ -1,0 +1,11 @@
+{
+  "name": "porra-live",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node scripts/serve.mjs",
+    "test": "node --test",
+    "check": "node --check src/core.js && node --check src/repository.js && node --check src/app.js"
+  }
+}

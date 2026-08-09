@@ -1,0 +1,6 @@
+.env
+.env.*
+!.env.example
+config.local.js
+node_modules/
+coverage/

@@ -1,140 +1,161 @@
-# ⚽ Finalíssima Porra
+# Porra Live
 
-Demo interactiva d’una porra digital per a un partit Espanya–Argentina, dissenyada i desenvolupada per **Marc Monferrer** amb l’ajuda de la intel·ligència artificial.
+Porra Live és una aplicació reutilitzable per crear, publicar i gestionar porres de diferents partits. L’administrador configura cada edició i els participants hi juguen sense registrar-se.
 
-[▶️ Obrir la demo interactiva](https://marcmonferrer.github.io/finalissima-porra/)
+La versió actual inclou un mode demo local complet i deixa preparat el backend compartit amb Supabase. Encara no s’ha desplegat aquesta versió.
 
-> **Mode demostració:** no hi ha pagaments ni dades personals reals. Les dades es desen exclusivament al navegador de cada visitant i es poden reiniciar en qualsevol moment.
+## Funcionalitats
 
----
+### Administració
 
-## Català
+- Crear i editar múltiples porres.
+- Configurar equips, imatges, horaris, preus, instruccions de pagament i quatre apostes especials.
+- Publicar, tancar i reobrir participacions.
+- Confirmar pagaments, alliberar reserves i corregir noms o apostes.
+- Actualitzar manualment el marcador, la fase, el minut, el descans, el resultat final i els especials.
+- Revisar i publicar premis definitius.
+- Consultar l’historial de porres.
 
-### Què pots provar
+### Participants
 
-- Quadrícula interactiva de resultats 5×5.
-- Selecció de fins a dues caselles per participant.
-- Tres apostes especials integrades a la quadrícula.
-- Càlcul automàtic del pot, els premis i la comissió del developer.
-- Simulació de pagaments pendents i confirmats.
-- Marcador editable amb fase i minut del partit.
-- Marcatge automàtic de la casella guanyadora a la mitja part i al final.
-- Confirmació manual de les apostes especials.
-- Missatges preparats per compartir a WhatsApp.
-- Botó per reiniciar completament la demo.
+- Participació sense compte.
+- Una o dues apostes diferents per participant.
+- Dues places independents per casella.
+- Resum del cost i de l’import destinat al pot abans de confirmar.
+- Reserva indefinida pendent de verificar pagament.
+- Enllaç privat per recuperar i seguir la participació des d’un altre dispositiu en mode Supabase.
+- Premi provisional i definitiu per aposta.
 
-### Com utilitzar la demo
+## Arquitectura
 
-1. Escriu el nom d’un participant.
-2. Selecciona una o dues caselles lliures.
-3. Prem **Assignar caselles**.
-4. Marca el pagament com a confirmat des de la llista de participants.
-5. Utilitza els **Controls de demostració** per modificar el marcador.
-6. Selecciona **Mitja part** o **Final** per comprovar el marcatge automàtic del guanyador.
-7. Prem **Reiniciar demo** per tornar a l’estat inicial.
+Porra Live continua sent un frontend estàtic i responsive, sense procés de compilació obligatori:
 
-### Funcionament de les dades
+- `index.html`: shell i perfil públic.
+- `styles.css`: sistema visual responsive.
+- `social-card-porra-live.png`: previsualització social de la nova identitat.
+- `src/core.js`: regles de negoci, capacitat i motor de premis.
+- `src/repository.js`: adaptadors demo i Supabase.
+- `src/app.js`: fluxos i interfície.
+- `supabase/migrations/`: esquema versionat, funcions transaccionals i RLS.
+- `supabase/functions/sync-live-score/`: integració opcional amb API-Football.
+- `tests/`: proves del motor i de les proteccions de dades.
 
-La demo pública funciona amb `localStorage`:
+`app.js`, `demo.js` i `supabase/live-match.sql` es conserven només com a referència del prototip anterior i ja no són carregats per `index.html`.
 
-- Cada visitant té una sessió independent.
-- No s’envia cap dada a un servidor.
-- No es processen pagaments reals.
-- En reiniciar la demo s’eliminen totes les dades locals.
+## Executar localment
 
-### Arquitectura original de producció
+Requereix Node.js 20 o posterior. No cal instal·lar dependències.
 
-El projecte original es va construir amb:
+```bash
+npm start
+```
 
-- **HTML, CSS i JavaScript** sense framework ni procés de compilació.
-- **GitHub Pages** per a la publicació.
-- **Supabase Database** per a les reserves i el marcador compartit.
-- **Supabase Auth** per protegir els controls de l’administrador.
-- **Supabase Realtime** per sincronitzar canvis entre dispositius.
-- **Supabase Edge Functions** i **API-Football** per automatitzar el marcador.
-- **Supabase Cron** per executar la sincronització cada dos minuts.
+Obre:
 
-El codi original connectat a Supabase es conserva a [`app.js`](app.js). La versió pública de demostració utilitza [`demo.js`](demo.js).
+```text
+http://127.0.0.1:4173/
+```
 
-### Fitxers principals
+Per executar les proves:
 
-| Fitxer | Funció |
-|---|---|
-| [`index.html`](index.html) | Interfície principal de la demo |
-| [`styles.css`](styles.css) | Disseny responsive i estils visuals |
-| [`demo.js`](demo.js) | Lògica local i reiniciable de la demo |
-| [`app.js`](app.js) | Lògica original connectada a Supabase |
-| [`supabase/live-match.sql`](supabase/live-match.sql) | Estructura del marcador compartit |
-| [`supabase/functions/sync-live-score/`](supabase/functions/sync-live-score/) | Sincronització amb API-Football |
-| [`supabase/schedule-live-score.sql`](supabase/schedule-live-score.sql) | Programació automàtica del marcador |
+```bash
+npm test
+npm run check
+```
 
----
+## Mode demo
 
-## English
+`config.public.js` activa per defecte `mode: "demo"`.
 
-### What you can test
+- Les dades es desen a `localStorage` amb la clau `porra-live-demo-v1`.
+- El mode queda identificat amb una franja groga permanent.
+- No comparteix dades entre navegadors o dispositius.
+- No processa pagaments reals.
+- La sessió d’administració és simulada.
 
-- Interactive 5×5 score grid.
-- Selection of up to two entries per participant.
-- Three special bets integrated into the grid.
-- Automatic calculation of the prize pool, payouts and developer fee.
-- Simulated pending and confirmed payments.
-- Editable scoreboard, match phase and minute.
-- Automatic winner highlighting at half-time and full-time.
-- Manual confirmation of special bets.
-- Ready-to-share WhatsApp messages.
-- Full demo reset button.
+El mode demo és una eina de prova; no s’ha d’utilitzar com a font de veritat d’una porra real.
 
-### How to use the demo
+## Configuració de Supabase
 
-1. Enter a participant name.
-2. Select one or two available squares.
-3. Press **Assignar caselles** to assign the entries.
-4. Mark the simulated payment as confirmed in the participant list.
-5. Use the **Controls de demostració** panel to update the score.
-6. Select **Mitja part** or **Final** to trigger automatic winner highlighting.
-7. Press **Reiniciar demo** to restore the initial state.
+1. Crea un projecte Supabase.
+2. Aplica `supabase/migrations/202608090001_porra_live_v1.sql` amb `supabase db push`.
+3. Crea l’únic compte administrador a Supabase Auth.
+4. Insereix el seu UUID a `public.admin_profiles` des d’un entorn de servidor o el SQL Editor.
+5. Injecta al frontend la configuració pública basada en `config.example.js`:
+   - `mode: "supabase"`;
+   - `supabaseUrl`;
+   - `supabasePublishableKey`.
+6. Verifica RLS des d’una sessió anònima abans de desplegar.
 
-### Demo data model
+La clau `publishable` és pública per disseny. Mai no s’han d’exposar `service_role`, contrasenyes, claus d’API o secrets de sincronització.
 
-The public demo uses browser `localStorage`:
+Consulta [supabase/README.md](supabase/README.md) per al model i el desplegament del backend.
 
-- Every visitor receives an independent session.
-- No data is sent to a server.
-- No real payments are processed.
-- Resetting the demo removes all locally stored data.
+## Seguretat i privacitat
 
-### Original production architecture
+- Supabase Auth només s’utilitza per a l’administrador.
+- Els participants no creen compte.
+- Les reserves públiques entren per l’RPC transaccional `create_public_reservation`.
+- L’RPC utilitza bloquejos de transacció per impedir una tercera ocupació simultània.
+- La base de dades limita dues apostes actives per participant i dues places per casella.
+- El públic no pot modificar pagaments, resultats ni premis.
+- L’enllaç privat conté un token aleatori; a la base de dades només se’n desa el hash SHA-256.
+- Les dades personals de participants no formen part de les publicacions Realtime.
+- No hi ha telèfons, Bizum, credencials ni secrets personals al repositori.
 
-The original project was built with:
+Les instruccions de pagament són dades de cada porra i s’han de configurar des del panell d’administració.
 
-- **HTML, CSS and JavaScript**, with no framework or build process.
-- **GitHub Pages** for deployment.
-- **Supabase Database** for entries and the shared scoreboard.
-- **Supabase Auth** to protect administrator controls.
-- **Supabase Realtime** for multi-device synchronization.
-- **Supabase Edge Functions** and **API-Football** for live-score automation.
-- **Supabase Cron** to run score synchronization every two minutes.
+## Regles de preus i capacitat
 
-The original Supabase-connected implementation remains available in [`app.js`](app.js). The public portfolio demo runs through [`demo.js`](demo.js).
+Valors per defecte:
 
-### Main files
+- Preu: 4,00 € per aposta.
+- Pot: 3,50 € per aposta.
+- Gestió: 0,50 € per aposta.
+- 25 caselles × 2 places = 50 apostes màximes.
 
-| File | Purpose |
-|---|---|
-| [`index.html`](index.html) | Main demo interface |
-| [`styles.css`](styles.css) | Responsive layout and visual design |
-| [`demo.js`](demo.js) | Local, resettable demo logic |
-| [`app.js`](app.js) | Original Supabase-connected logic |
-| [`supabase/live-match.sql`](supabase/live-match.sql) | Shared scoreboard schema |
-| [`supabase/functions/sync-live-score/`](supabase/functions/sync-live-score/) | API-Football synchronization |
-| [`supabase/schedule-live-score.sql`](supabase/schedule-live-score.sql) | Automated score schedule |
+Amb 50 apostes pagades: 200 € recaptats, 175 € de pot i 25 € de gestió.
 
----
+Només les apostes pagades formen part del pot confirmat i poden guanyar premis.
 
-## Author
+## Regles dels premis
 
-**Marc Monferrer**  
-AI consulting · Prototypes · Automation · Applied artificial intelligence
+El pot confirmat més l’acumulat anterior es divideix així:
 
-[LinkedIn](https://www.linkedin.com/in/marcmonferrer)
+- 25% per al resultat exacte al descans.
+- 50% per al resultat exacte final.
+- 25% per a les apostes especials complertes.
+
+El repartiment es fa per aposta guanyadora. Si dues apostes pagades ocupen la mateixa casella guanyadora, totes dues compten.
+
+Redistribució:
+
+1. Una franja de descans o especials sense guanyadors passa al resultat final.
+2. Si no hi ha guanyador final, la franja final disponible es reparteix entre totes les apostes guanyadores del descans i dels especials.
+3. Si no hi ha cap aposta guanyadora, el 100% queda acumulat.
+
+Els càlculs es fan en cèntims. Les restes es distribueixen amb el mètode de la resta més gran i un ordre estable: descans, final i especials. Dins d’una franja, els cèntims sobrants s’assignen per identificador d’aposta ordenat. La suma dels premis sempre coincideix exactament amb el pot.
+
+## API-Football
+
+El control manual funciona completament sense API externa.
+
+La funció `sync-live-score` és opcional, rep un `poolId` i un `fixtureId` explícits i utilitza secrets exclusivament del servidor. No busca partits automàticament, no té cap cron actiu i una fallada del proveïdor no bloqueja la porra.
+
+## Desplegament
+
+El frontend es pot publicar com a web estàtica a GitHub Pages. Abans de desplegar el mode real:
+
+1. Aplica i valida les migracions.
+2. Configura l’administrador i la configuració pública.
+3. Executa totes les proves.
+4. Revisa RLS i els fluxos anònims.
+5. Publica només després d’haver verificat que no hi ha dades personals ni secrets.
+
+No cal activar l’Edge Function ni API-Football per a la primera publicació.
+
+## Autor
+
+**Marc Monferrer** — AI Consultant & Front-End Developer
+
+[LinkedIn](https://www.linkedin.com/in/marcmonferrer/) · [marcmonferrer.ai@gmail.com](mailto:marcmonferrer.ai@gmail.com)

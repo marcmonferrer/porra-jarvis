@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const SUPABASE_URL = "https://hnezlrjxsbujkeupogvf.supabase.co";
-  const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_A_qihcL6So8YhJcMsZxxKw_50XjK59F";
+  const SUPABASE_URL = window.PORRA_LIVE_CONFIG?.supabaseUrl;
+  const SUPABASE_PUBLISHABLE_KEY = window.PORRA_LIVE_CONFIG?.supabasePublishableKey;
   const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
   const ENTRY_PRICE = 4.5;
@@ -507,7 +507,7 @@
       "🏆 50% per al marcador final, sempre",
       "✨ 25% per a les especials encertades; si no n'hi ha cap, s'afegeix al premi final",
       "🧑‍💻 0,50 € per casella per al developer de l'app",
-      "📲 Bizum: 692 84 37 43 · assumpte: Nom PAGAT",
+      "📲 Pagament: consulta les instruccions configurades per l'administrador.",
       "",
       `Caselles disponibles: ${free.map(shortScore).join(", ") || "cap"}`,
       "",
