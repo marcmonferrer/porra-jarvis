@@ -15,6 +15,7 @@ import {
   validateMatchUpdate,
   winningBetsText
 } from "./core.js";
+import { isDemoResetAvailable, resetDemoSafely } from "./demo-reset.js";
 import { createRepository } from "./repository.js";
 
 const app = document.querySelector("#app");
@@ -238,6 +239,23 @@ function poolForm(pool = {}) {
   </form>`;
 }
 
+function adminPoolActions(pool) {
+  const poolActions = pool ? `<button class="button primary" data-action="publish-pool" ${pool.status === "draft" ? "" : "disabled"}>Publicar</button><button class="button" data-action="toggle-pool" ${["open","closed"].includes(pool.status) ? "" : "disabled"}>${pool.status === "open" ? "Tancar participacions" : pool.status === "closed" ? "Reobrir" : "Estat bloquejat"}</button><button class="button secondary" data-view="public">Obrir vista pública</button>` : "";
+  const resetAction = isDemoResetAvailable(repository) ? `<button class="button danger demo-reset" data-action="reset-demo">Reiniciar demo</button>` : "";
+  return poolActions || resetAction ? `<div class="action-row">${poolActions}${resetAction}</div>` : "";
+}
+
+function clearDemoUiState() {
+  currentPoolId = null;
+  selectedCells = [];
+  lastTrackingToken = "";
+  historySummaryPoolId = null;
+  adminMatchNotice = "";
+  activeAdminTab = "pool";
+  view = "admin";
+  window.history.replaceState(null, "", `${location.pathname}#admin`);
+}
+
 async function renderAdmin() {
   const session = await repository.getSession();
   if (repository.mode !== "demo" && !session?.user) {
@@ -253,7 +271,7 @@ async function renderAdmin() {
     <div class="admin-tabs" role="tablist">
       <button data-admin-tab="pool" class="${activeAdminTab === "pool" ? "active" : ""}">1. Porra</button><button data-admin-tab="bets" class="${activeAdminTab === "bets" ? "active" : ""}" ${pool ? "" : "disabled"}>2. Apostes</button><button data-admin-tab="match" class="${activeAdminTab === "match" ? "active" : ""}" ${pool ? "" : "disabled"}>3. Directe</button><button data-admin-tab="prizes" class="${activeAdminTab === "prizes" ? "active" : ""}" ${pool ? "" : "disabled"}>4. Premis</button><button data-admin-tab="history" class="${activeAdminTab === "history" ? "active" : ""}">5. Historial</button>
     </div>
-    <section class="panel admin-panel" data-admin-panel="pool" ${activeAdminTab === "pool" ? "" : "hidden"}><div class="section-heading"><div><span>Configuració</span><h2>${pool ? "Editar porra" : "Crear la primera porra"}</h2></div>${pool ? `<span class="status-pill status-${pool.status}">${statusLabel(pool.status)}</span>` : ""}</div>${poolForm(pool || {})}${pool ? `<div class="action-row"><button class="button primary" data-action="publish-pool" ${pool.status === "draft" ? "" : "disabled"}>Publicar</button><button class="button" data-action="toggle-pool" ${["open","closed"].includes(pool.status) ? "" : "disabled"}>${pool.status === "open" ? "Tancar participacions" : pool.status === "closed" ? "Reobrir" : "Estat bloquejat"}</button><button class="button secondary" data-view="public">Obrir vista pública</button></div>` : ""}</section>
+    <section class="panel admin-panel" data-admin-panel="pool" ${activeAdminTab === "pool" ? "" : "hidden"}><div class="section-heading"><div><span>Configuració</span><h2>${pool ? "Editar porra" : "Crear la primera porra"}</h2></div>${pool ? `<span class="status-pill status-${pool.status}">${statusLabel(pool.status)}</span>` : ""}</div>${poolForm(pool || {})}${adminPoolActions(pool)}</section>
     <section class="panel admin-panel" data-admin-panel="bets" ${activeAdminTab === "bets" ? "" : "hidden"}>${state ? adminBetsMarkup(state) : ""}</section>
     <section class="panel admin-panel" data-admin-panel="match" ${activeAdminTab === "match" ? "" : "hidden"}>${state ? adminMatchMarkup(state) : ""}</section>
     <section class="panel admin-panel" data-admin-panel="prizes" ${activeAdminTab === "prizes" ? "" : "hidden"}>${state ? adminPrizesMarkup(state) : ""}</section>
@@ -472,6 +490,16 @@ app.addEventListener("click", async event => {
     const state = await repository.getPoolState(currentPoolId);
     await repository.setPoolStatus(currentPoolId, state.pool.status === "open" ? "closed" : "open");
     notify(state.pool.status === "open" ? "Participacions reobertes." : "Participacions tancades."); await renderAdmin();
+  }
+  if (event.target.closest("[data-action='reset-demo']")) {
+    await resetDemoSafely({
+      repository,
+      confirmReset: message => window.confirm(message),
+      clearActiveState: clearDemoUiState,
+      reloadAdmin: renderAdmin,
+      notify
+    });
+    return;
   }
   const pay = event.target.closest("[data-pay-reservation]");
   if (pay) {

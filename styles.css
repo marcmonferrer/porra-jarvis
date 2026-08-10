@@ -148,6 +148,7 @@ legend { padding: 0 8px; font-weight: 850; }
 .special-form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
 .special-form-grid > div { display: grid; gap: 10px; padding: 14px; border-radius: 14px; background: #fff7fb; }
 .action-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--line); }
+.action-row .demo-reset { margin-left: auto; border-color: #f1c5cc; background: #fff8f9; }
 .table-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; }
 th, td { padding: 12px 8px; border-bottom: 1px solid var(--line); text-align: left; }
@@ -256,6 +257,7 @@ td:last-child { display: flex; gap: 6px; }
   .reservation-card__heading, .history-list article { grid-template-columns: 1fr; align-items: stretch; }
   .reservation-card__heading > div { justify-content: space-between; }
   .history-list article .button { width: 100%; }
+  .action-row .demo-reset { width: 100%; margin-left: 0; }
   .history-metrics { grid-template-columns: 1fr; }
   .review-check, .admin-hero { align-items: stretch; flex-direction: column; }
   .tracking-entry form { display: grid; }
