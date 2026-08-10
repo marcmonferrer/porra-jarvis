@@ -1,6 +1,15 @@
 # Backend Supabase de Porra Live
 
-La migració inicial `migrations/202608090001_porra_live_v1.sql` defineix tot el backend compartit. Encara no s’ha aplicat a cap projecte Supabase.
+Les migracions versionades defineixen el backend compartit de Porra Live i ja estan desplegades a `porra-live-beta`, l’entorn de validació aïllat.
+
+## Estat de migracions desplegades
+
+| Migració local | Versió remota | Descripció |
+| --- | --- | --- |
+| `migrations/20260810143143_porra_live_v1.sql` | `20260810143143` | Model compartit, RPC transaccionals, RLS, permisos, triggers i Realtime segur. |
+| `migrations/20260810144836_add_supabase_foreign_key_indexes.sql` | `20260810144836` | Índexs de claus externes per a unions i accions referencials. |
+
+`porra-live-beta` no és encara un entorn públic: no té administrador, dades, credencials configurades al frontend ni desplegament compartit.
 
 ## Arquitectura demo i Supabase
 
@@ -89,17 +98,13 @@ API-Football queda completament desactivada per a la beta. No hi ha cap cron act
 
 La base garanteix integritat i concurrència, però encara no limita quantes reserves pot intentar crear una mateixa persona o IP. Una mesura antiabús —invitació, CAPTCHA o rate limit— és un requisit bloquejant abans del desplegament compartit de la beta.
 
-## Procés previst per a `porra-live-beta`
+## Properes fases de `porra-live-beta`
 
-1. Disposar de Supabase CLI i Docker locals.
-2. Iniciar una base local descartable i aplicar-hi la migració completa.
-3. Executar proves de rols `anon`, autenticat no administrador i administrador, concurrència i advisors.
-4. Revisar que la migració local queda neta i repetible.
-5. Amb aprovació explícita, crear `porra-live-beta` a l’organització i regió acordades.
-6. Vincular la CLI al projecte nou, mai a `finalissima-porra`.
-7. Aplicar la migració versionada amb `supabase db push`.
-8. Crear l’únic usuari Auth administrador i inserir el seu UUID a `admin_profiles` des d’un entorn privilegiat.
-9. Configurar al frontend només URL i publishable key.
-10. Repetir proves RLS, Realtime i privacitat abans de desplegar.
+1. Disposar de Supabase CLI i Docker locals per validar les migracions en una base descartable.
+2. Amb aprovació explícita, crear comptes Auth de prova i validar rols, concurrència, RLS, Realtime i privacitat amb dades sintètiques.
+3. Amb una aprovació separada, crear l’únic administrador i afegir el seu UUID a `admin_profiles` des d’un entorn privilegiat.
+4. Configurar al frontend únicament la URL i la publishable key del projecte de validació.
+5. Implementar una mesura antiabús abans de qualsevol beta compartida.
+6. Repetir la validació completa abans d’un desplegament públic.
 
-No s’ha de confirmar cap cost, crear cap projecte ni aplicar aquesta migració al núvol fins a rebre aprovació expressa.
+No s’ha de connectar el frontend, crear usuaris o dades, ni desplegar públicament sense una aprovació posterior expressa. `finalissima-porra` queda fora d’aquest flux.

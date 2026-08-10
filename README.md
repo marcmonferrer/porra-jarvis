@@ -78,7 +78,7 @@ El mode demo és una eina de prova; no s’ha d’utilitzar com a font de verita
 ## Configuració de Supabase
 
 1. Crea un projecte Supabase.
-2. Valida primer `supabase/migrations/202608090001_porra_live_v1.sql` en una base local descartable i aplica-la després amb `supabase db push`.
+2. Valida primer `supabase/migrations/20260810143143_porra_live_v1.sql` en una base local descartable i aplica-la després amb `supabase db push`.
 3. Crea l’únic compte administrador a Supabase Auth.
 4. Insereix el seu UUID a `public.admin_profiles` des d’un entorn de servidor o el SQL Editor.
 5. Injecta al frontend la configuració pública basada en `config.example.js`:

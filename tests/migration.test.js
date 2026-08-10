@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const migrationUrl = new URL("../supabase/migrations/202608090001_porra_live_v1.sql", import.meta.url);
+const migrationUrl = new URL("../supabase/migrations/20260810143143_porra_live_v1.sql", import.meta.url);
 const repositoryUrl = new URL("../src/repository.js", import.meta.url);
 const edgeFunctionUrl = new URL("../supabase/functions/sync-live-score/index.ts", import.meta.url);
 
