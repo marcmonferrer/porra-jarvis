@@ -1,4 +1,4 @@
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2.111.0";
 
 const API_BASE = "https://v3.football.api-sports.io";
 const FINAL_STATUSES = new Set(["FT", "AET", "PEN"]);

@@ -34,7 +34,7 @@ Porra Live continua sent un frontend estàtic i responsive, sense procés de com
 - `styles.css`: sistema visual responsive.
 - `social-card-porra-live.png`: previsualització social de la nova identitat.
 - `src/core.js`: regles de negoci, capacitat i motor de premis.
-- `src/repository.js`: adaptadors demo i Supabase.
+- `src/repository.js`: adaptadors demo i Supabase, amb `supabase-js` fixat a `2.111.0`.
 - `src/app.js`: fluxos i interfície.
 - `supabase/migrations/`: esquema versionat, funcions transaccionals i RLS.
 - `supabase/functions/sync-live-score/`: integració opcional amb API-Football.
@@ -78,7 +78,7 @@ El mode demo és una eina de prova; no s’ha d’utilitzar com a font de verita
 ## Configuració de Supabase
 
 1. Crea un projecte Supabase.
-2. Aplica `supabase/migrations/202608090001_porra_live_v1.sql` amb `supabase db push`.
+2. Valida primer `supabase/migrations/202608090001_porra_live_v1.sql` en una base local descartable i aplica-la després amb `supabase db push`.
 3. Crea l’únic compte administrador a Supabase Auth.
 4. Insereix el seu UUID a `public.admin_profiles` des d’un entorn de servidor o el SQL Editor.
 5. Injecta al frontend la configuració pública basada en `config.example.js`:
@@ -93,17 +93,20 @@ Consulta [supabase/README.md](supabase/README.md) per al model i el desplegament
 
 ## Seguretat i privacitat
 
-- Supabase Auth només s’utilitza per a l’administrador.
+- Supabase Auth només s’utilitza per a l’administrador i l’autorització depèn exclusivament de `admin_profiles`.
 - Els participants no creen compte.
 - Les reserves públiques entren per l’RPC transaccional `create_public_reservation`.
 - L’RPC utilitza bloquejos de transacció per impedir una tercera ocupació simultània.
 - La base de dades limita dues apostes actives per participant i dues places per casella.
 - El públic no pot modificar pagaments, resultats ni premis.
 - L’enllaç privat conté un token aleatori; a la base de dades només se’n desa el hash SHA-256.
-- Les dades personals de participants no formen part de les publicacions Realtime.
+- Realtime publica només `pool_revisions`, amb slug, revisió i timestamp; no publica apostes, participants, UUID, pagaments, marcadors ni premis.
+- Les operacions compostes `updateReservation`, `updateMatch` i `finalizePool` passen per RPC administratives atòmiques.
 - No hi ha telèfons, Bizum, credencials ni secrets personals al repositori.
 
-Les instruccions de pagament són dades de cada porra i s’han de configurar des del panell d’administració.
+Les instruccions de pagament són privades: només es retornen després de reservar o amb el tracking individual. No hi introduïu telèfons ni comptes personals per a la beta.
+
+La protecció antiabús encara està pendent. Abans d’una beta compartida cal afegir invitació, CAPTCHA o rate limit; les restriccions SQL garanteixen integritat, però no impedeixen que una mateixa persona intenti crear moltes reserves.
 
 ## Regles de preus i capacitat
 
@@ -140,19 +143,19 @@ Els càlculs es fan en cèntims. Les restes es distribueixen amb el mètode de l
 
 El control manual funciona completament sense API externa.
 
-La funció `sync-live-score` és opcional, rep un `poolId` i un `fixtureId` explícits i utilitza secrets exclusivament del servidor. No busca partits automàticament, no té cap cron actiu i una fallada del proveïdor no bloqueja la porra.
+La funció `sync-live-score` es conserva com a referència opcional, però API-Football queda completament desactivada per a la beta: no es desplega la funció, no hi ha cap cron i no es configuren els seus secrets.
 
 ## Desplegament
 
 El frontend es pot publicar com a web estàtica a GitHub Pages. Abans de desplegar el mode real:
 
-1. Aplica i valida les migracions.
+1. Aplica i valida les migracions primer en una base local descartable.
 2. Configura l’administrador i la configuració pública.
 3. Executa totes les proves.
 4. Revisa RLS i els fluxos anònims.
 5. Publica només després d’haver verificat que no hi ha dades personals ni secrets.
 
-No cal activar l’Edge Function ni API-Football per a la primera publicació.
+No s’ha d’activar l’Edge Function ni API-Football per a la beta. El procés complet, la matriu de permisos i els controls previs es documenten a [supabase/README.md](supabase/README.md).
 
 ## Autor
 

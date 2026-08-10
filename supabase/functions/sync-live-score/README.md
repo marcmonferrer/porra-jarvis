@@ -1,6 +1,6 @@
-# Sincronització opcional amb API-Football
+# Sincronització desactivada amb API-Football
 
-Aquesta Edge Function és opcional. El control manual de Porra Live funciona sense proveïdor esportiu i continua disponible si l’API falla.
+Aquesta Edge Function es conserva únicament com a referència local. Per a la beta de Porra Live està completament desactivada: no es desplega, no s’invoca, no té cron i no se’n configuren secrets.
 
 La funció no busca ni inventa partits. Cal configurar explícitament l’identificador `fixtureId` d’API-Football per a cada porra i invocar-la amb:
 
@@ -15,4 +15,4 @@ Secrets exclusivament del servidor:
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `SUPABASE_URL`
 
-No s’inclou ni s’activa cap cron. Si en el futur se’n configura un, ha de limitar-se a la finestra del partit i llegir `SYNC_SECRET` des de Supabase Vault.
+Qualsevol activació futura requerirà una decisió i una revisió de seguretat separades. En aquest cas haurà de limitar-se a la finestra del partit i llegir `SYNC_SECRET` des de Supabase Vault.

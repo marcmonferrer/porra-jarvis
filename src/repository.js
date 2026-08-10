@@ -273,7 +273,7 @@ export class SupabaseRepository {
   }
 
   static async create(config) {
-    const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
+    const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2.111.0");
     return new SupabaseRepository(createClient(config.supabaseUrl, config.supabasePublishableKey));
   }
 
@@ -294,10 +294,36 @@ export class SupabaseRepository {
     if (error) throw error;
   }
 
-  async listPools() {
+  async isAdmin() {
+    const session = await this.getSession();
+    if (!session?.user) return false;
+    const { data, error } = await this.client
+      .from("admin_profiles")
+      .select("user_id")
+      .eq("user_id", session.user.id)
+      .maybeSingle();
+    if (error) throw error;
+    return Boolean(data);
+  }
+
+  async listAdminPools() {
     const { data, error } = await this.client.from("pools").select("*, special_bets(*)").order("created_at", { ascending: false });
     if (error) throw error;
     return data.map(row => this.mapPool(row));
+  }
+
+  async getPublicPoolState(poolIdOrSlug = "") {
+    const { data, error } = await this.client.rpc("get_public_pool_state", {
+      pool_identifier: poolIdOrSlug || ""
+    });
+    if (error) throw error;
+    return data;
+  }
+
+  async listPools(poolIdOrSlug = "") {
+    if (await this.isAdmin()) return this.listAdminPools();
+    const state = await this.getPublicPoolState(poolIdOrSlug);
+    return state ? [this.mapPool(state.pool)] : [];
   }
 
   mapPool(row) {
@@ -318,7 +344,10 @@ export class SupabaseRepository {
   }
 
   async getPool(poolIdOrSlug) {
-    return (await this.listPools()).find(pool => pool.id === poolIdOrSlug || pool.slug === poolIdOrSlug) || null;
+    if (await this.isAdmin()) {
+      return (await this.listAdminPools()).find(pool => pool.id === poolIdOrSlug || pool.slug === poolIdOrSlug) || null;
+    }
+    return (await this.getPublicPoolState(poolIdOrSlug))?.pool || null;
   }
 
   async savePool(input) {
@@ -359,10 +388,12 @@ export class SupabaseRepository {
   }
 
   async getPoolState(poolIdOrSlug) {
-    const { data, error } = await this.client.rpc("get_public_pool_state", { pool_identifier: poolIdOrSlug });
-    if (error) throw error;
-    if (data) return data;
-    const pool = await this.getPool(poolIdOrSlug);
+    if (!(await this.isAdmin())) return this.getPublicPoolState(poolIdOrSlug);
+    return this.getAdminPoolState(poolIdOrSlug);
+  }
+
+  async getAdminPoolState(poolIdOrSlug) {
+    const pool = (await this.listAdminPools()).find(item => item.id === poolIdOrSlug || item.slug === poolIdOrSlug);
     if (!pool) return null;
     const [betsResult, participantsResult, matchResult, specialsResult, prizeResult, awardsResult] = await Promise.all([
       this.client.from("bets").select("*").eq("pool_id", pool.id),
@@ -407,7 +438,7 @@ export class SupabaseRepository {
   }
 
   async createReservation({ poolId, name, cellKeys }) {
-    const state = await this.getPoolState(poolId);
+    const state = await this.getPublicPoolState(poolId);
     if (!state) throw new Error("No s'ha trobat la porra.");
     const participation = participationState(state);
     if (!participation.open) throw new Error(participation.message);
@@ -424,7 +455,7 @@ export class SupabaseRepository {
     const { data, error } = await this.client.rpc("get_tracking_state", { raw_tracking_token: token });
     if (error) throw error;
     if (!data) return data;
-    const state = await this.getPoolState(data.pool.id);
+    const state = await this.getPublicPoolState(data.pool.id);
     const preview = state.prizeResult || calculatePrizes({ pool: state.pool, bets: state.bets, match: state.match });
     return {
       ...data,
@@ -457,20 +488,13 @@ export class SupabaseRepository {
   }
 
   async updateReservation(participantId, { name, bets }) {
-    const participantResult = await this.client.from("participants").select("pool_id").eq("id", participantId).single();
-    if (participantResult.error) throw participantResult.error;
-    const state = await this.getPoolState(participantResult.data.pool_id);
-    const pool = state.pool;
-    const validation = validateSelection({
-      pool: { ...pool, status: "open", closesAt: "" },
-      bets: state.bets.filter(item => item.participantId !== participantId),
-      participantId,
-      cellKeys: bets.map(item => item.cellKey)
+    const { data, error } = await this.client.rpc("admin_update_reservation", {
+      target_participant_id: participantId,
+      participant_name: name,
+      bet_updates: bets.map(bet => ({ id: bet.id, cellKey: bet.cellKey }))
     });
-    if (!validation.valid) throw new Error(validation.errors[0]);
-    await this.updateParticipant(participantId, name);
-    await Promise.all(bets.map(bet => this.updateBet(bet.id, { cellKey: bet.cellKey })));
-    return { participantId, bets };
+    if (error) throw error;
+    return data;
   }
 
   async updateReservationPayment(participantId, paymentStatus) {
@@ -483,23 +507,12 @@ export class SupabaseRepository {
   }
 
   async updateMatch(poolId, patch) {
-    const matchPayload = {
-      pool_id: poolId, phase: patch.phase, minute: patch.minute,
-      current_home: patch.currentHome, current_away: patch.currentAway,
-      half_home: patch.halfHome, half_away: patch.halfAway,
-      final_home: patch.finalHome, final_away: patch.finalAway,
-      updated_at: new Date().toISOString()
-    };
-    const { error } = await this.client.from("match_states").upsert(matchPayload);
+    const { data, error } = await this.client.rpc("admin_update_match", {
+      target_pool_id: poolId,
+      match_patch: patch
+    });
     if (error) throw error;
-    const pool = await this.getPool(poolId);
-    const rows = pool.specials.map(item => ({
-      pool_id: poolId, special_bet_id: item.id,
-      status: patch.specialStatuses[item.cellKey], updated_at: new Date().toISOString()
-    }));
-    const specialResult = await this.client.from("special_results").upsert(rows, { onConflict: "pool_id,special_bet_id" });
-    if (specialResult.error) throw specialResult.error;
-    return patch;
+    return data;
   }
 
   async finalizePool(poolId) {
@@ -508,32 +521,51 @@ export class SupabaseRepository {
     if (state.match.phase !== "final") throw new Error("Cal desar el partit en fase Final abans de publicar els premis.");
     const validation = validateMatchUpdate({ match: state.match });
     if (!validation.valid) throw new Error(validation.errors[0]);
-    const session = await this.getSession();
     const result = calculatePrizes({ pool: state.pool, bets: state.bets, match: state.match });
-    const saved = await this.client.from("prize_results").upsert({
-      pool_id: poolId, total_pot_cents: result.totalPotCents, carryover_cents: result.carryoverCents,
-      calculation: result, finalized_by: session.user.id, finalized_at: new Date().toISOString()
+    const { data, error } = await this.client.rpc("admin_finalize_pool", {
+      target_pool_id: poolId,
+      prize_calculation: result
     });
-    if (saved.error) throw saved.error;
-    await this.client.from("prize_awards").delete().eq("pool_id", poolId);
-    const awardRows = result.awards.flatMap(award => award.breakdown.map(item => ({
-      pool_id: poolId, bet_id: award.betId, category: item.category, amount_cents: item.cents
-    })));
-    if (awardRows.length) {
-      const awards = await this.client.from("prize_awards").insert(awardRows);
-      if (awards.error) throw awards.error;
-    }
-    await this.setPoolStatus(poolId, "finished");
-    return result;
+    if (error) throw error;
+    return data;
   }
 
-  subscribe(poolId, listener) {
-    const channel = this.client.channel(`porra-live-${poolId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "bets", filter: `pool_id=eq.${poolId}` }, listener)
-      .on("postgres_changes", { event: "*", schema: "public", table: "match_states", filter: `pool_id=eq.${poolId}` }, listener)
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "pools", filter: `id=eq.${poolId}` }, listener)
-      .subscribe();
-    return () => this.client.removeChannel(channel);
+  subscribe(poolSlug, listener) {
+    let active = true;
+    let channel = null;
+    let retryTimer = null;
+
+    const connect = () => {
+      if (!active) return;
+      channel = this.client.channel(`porra-live-${poolSlug}-${Date.now()}`)
+        .on("postgres_changes", {
+          event: "UPDATE",
+          schema: "public",
+          table: "pool_revisions",
+          filter: `pool_slug=eq.${poolSlug}`
+        }, listener)
+        .subscribe(status => {
+          if (!active) return;
+          if (status === "SUBSCRIBED") {
+            listener();
+            return;
+          }
+          if (!["CHANNEL_ERROR", "TIMED_OUT", "CLOSED"].includes(status) || retryTimer) return;
+          const staleChannel = channel;
+          retryTimer = setTimeout(async () => {
+            retryTimer = null;
+            if (staleChannel) await this.client.removeChannel(staleChannel);
+            connect();
+          }, 1000);
+        });
+    };
+
+    connect();
+    return () => {
+      active = false;
+      clearTimeout(retryTimer);
+      if (channel) void this.client.removeChannel(channel);
+    };
   }
 }
 

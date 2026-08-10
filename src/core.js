@@ -68,7 +68,7 @@ export function activeBets(bets) {
 }
 
 export function paidBets(bets) {
-  return bets.filter(bet => bet.paymentStatus === "paid");
+  return bets.filter(bet => bet.paymentStatus === "paid" || bet.eligible === true);
 }
 
 export function occupancyForCell(bets, cellKey) {

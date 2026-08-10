@@ -93,6 +93,12 @@ function ensureRealtime(poolId) {
   });
 }
 
+function clearRealtime() {
+  unsubscribeRealtime?.();
+  unsubscribeRealtime = null;
+  subscribedPoolId = null;
+}
+
 function renderTeam(team, image, side) {
   const visual = image
     ? `<img src="${escapeHtml(image)}" alt="" loading="lazy">`
@@ -132,7 +138,7 @@ function gridMarkup(state, interactive = true) {
   const rows = Array.from({ length: 5 }, (_, away) => {
     const cells = Array.from({ length: 5 }, (_, home) => {
       const key = resultCell(home, away);
-      const occupancy = occupancyForCell(bets, key);
+      const occupancy = state.occupancy?.[key] ?? occupancyForCell(bets, key);
       const available = 2 - occupancy;
       const selected = selectedCells.includes(key);
       const special = isSpecialCell(key);
@@ -213,7 +219,7 @@ function closedParticipationMarkup(state, participation) {
 }
 
 async function resolveActivePool() {
-  const pools = await repository.listPools();
+  const pools = await repository.listPools(currentPoolId || "");
   if (currentPoolId) {
     const selected = pools.find(pool => pool.id === currentPoolId || pool.slug === currentPoolId);
     if (selected) return selected;
@@ -224,11 +230,12 @@ async function resolveActivePool() {
 async function renderPublic() {
   const pool = await resolveActivePool();
   if (!pool) {
+    clearRealtime();
     app.innerHTML = `<section class="empty-state panel"><span>⚽</span><h1>Encara no hi ha cap porra publicada</h1><p>L’administrador pot crear la primera porra des del panell d’administració.</p><button class="button primary" data-view="admin">Crear una porra</button></section>`;
     return;
   }
   currentPoolId = pool.id;
-  ensureRealtime(pool.id);
+  ensureRealtime(pool.slug || pool.id);
   const state = await repository.getPoolState(pool.id);
   const participation = participationState(state);
   const canPlay = participation.open;
@@ -284,7 +291,7 @@ async function confirmReservation() {
     app.innerHTML = `${hero(state.pool, state.match)}<section class="success-state panel">
       <span class="success-icon">✓</span><p class="eyebrow">Reserva creada</p><h2>Pendent de verificar pagament</h2>
       <p>Has reservat ${result.bets?.length || 0} ${result.bets?.length === 1 ? "aposta" : "apostes"} per un total de <strong>${formatMoney((result.bets?.length || 0) * state.pool.priceCents)}</strong>.</p>
-      <div class="payment-box"><strong>Instruccions de pagament</strong><p>${escapeHtml(state.pool.paymentInstructions || "L’administrador encara no ha configurat les instruccions.")}</p></div>
+      <div class="payment-box"><strong>Instruccions de pagament</strong><p>${escapeHtml(result.paymentInstructions || "L’administrador encara no ha configurat les instruccions.")}</p></div>
       <p>Desa aquest enllaç privat per consultar l’estat des de qualsevol dispositiu:</p>
       <div class="private-link"><input readonly value="${escapeHtml(trackUrl)}" aria-label="Enllaç privat de seguiment"><button class="button" data-copy="${escapeHtml(trackUrl)}">Copiar</button></div>
       <button class="button primary" data-view="tracking">Veure la meva aposta</button>
@@ -676,4 +683,5 @@ document.querySelector(".app-header").addEventListener("click", async event => {
 });
 
 window.addEventListener("hashchange", () => { view = location.hash.replace("#", "") || "public"; render(); });
+window.addEventListener("beforeunload", clearRealtime);
 await render();

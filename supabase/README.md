@@ -1,38 +1,105 @@
 # Backend Supabase de Porra Live
 
-La migració versionada `migrations/202608090001_porra_live_v1.sql` crea el model complet de Porra Live.
+La migració inicial `migrations/202608090001_porra_live_v1.sql` defineix tot el backend compartit. Encara no s’ha aplicat a cap projecte Supabase.
 
-## Aplicació
+## Arquitectura demo i Supabase
 
-Amb Supabase CLI vinculat al projecte:
+- `DemoRepository` conserva tota la funcionalitat local a `localStorage` amb la clau `porra-live-demo-v1`.
+- `SupabaseRepository` s’activa només amb `mode: "supabase"`, URL i publishable key.
+- El frontend continua sent estàtic. Carrega `@supabase/supabase-js@2.111.0` des d’un URL ESM fixat.
+- Les reserves i lectures públiques passen exclusivament per RPC.
+- L’administració utilitza Supabase Auth, RLS i RPC transaccionals per a les operacions compostes.
 
-```bash
-supabase db push
-```
+## Model d’autorització
 
-Després:
+Ser autenticat no converteix ningú en administrador. L’única font d’autorització és una fila a `public.admin_profiles` amb `user_id = auth.uid()`.
 
-1. Crea manualment l’únic usuari administrador a Supabase Auth.
-2. Insereix el seu UUID a `public.admin_profiles` mitjançant el SQL Editor o una operació de servidor.
-3. Configura al frontend només la URL del projecte i la clau `publishable`.
-4. Comprova les polítiques RLS amb un navegador anònim abans de publicar.
+No s’utilitzen `user_metadata`, `app_metadata` ni `auth.role()`. Les RPC administratives criden `private.require_porra_admin()` abans de llegir o modificar dades. Les funcions privilegiades utilitzen `search_path = ''`, noms qualificats i `EXECUTE` revocat a `PUBLIC`.
 
-## Model
+## Matriu de permisos
 
-- `admin_profiles`: autorització de l’administrador.
-- `pools`: configuració i estat de cada porra.
-- `special_bets`: les quatre especials de cada porra.
-- `participants`: nom i hash de l’enllaç privat.
-- `bets`: una fila per aposta i plaça.
-- `match_states` i `special_results`: control del partit.
-- `prize_results` i `prize_awards`: càlcul definitiu i imports per aposta.
+| Rol | Accés directe | RPC |
+| --- | --- | --- |
+| `anon` | `SELECT` exclusivament sobre `pool_revisions`, protegit per RLS | `create_public_reservation`, `get_public_pool_state`, `get_tracking_state` |
+| `authenticated` sense perfil | Mateixa revisió pública; RLS denega les taules administratives | Les tres RPC públiques; les RPC administratives rebutgen la petició |
+| `authenticated` amb `admin_profiles` | CRUD de les taules operatives, limitat per RLS | RPC públiques i `admin_update_reservation`, `admin_update_match`, `admin_finalize_pool` |
+| servidor privilegiat | Només per a configuració operativa controlada | No arriba mai al navegador |
 
-Les reserves anònimes no escriuen directament a les taules. L’RPC `create_public_reservation` bloqueja transaccionalment cada casella i participant, valida els límits i retorna una única vegada el token privat. Només se’n desa el hash SHA-256.
+RLS està activat a totes les taules de `public`. `GRANT` controla si el rol pot arribar a l’objecte i RLS controla les files que pot veure o modificar.
 
-## Realtime
+## RPC
 
-La migració incorpora `pools`, `bets`, `match_states` i `special_results` a `supabase_realtime`. Les dades personals de `participants` no es publiquen.
+Públiques:
+
+- `create_public_reservation`: reserva transaccional amb bloquejos per casella, límits de capacitat, tancament i fase.
+- `get_public_pool_state`: estat sanejat sense UUID, tracking, correu, telèfon, instruccions de pagament ni reserves pendents identificables.
+- `get_tracking_state`: estat individual protegit pel token aleatori; a la base només se’n conserva el hash SHA-256.
+
+Administratives i atòmiques:
+
+- `admin_update_reservation`: actualitza nom i totes les seleccions o reverteix completament.
+- `admin_update_match`: actualitza marcador i especials en una sola transacció.
+- `admin_finalize_pool`: valida fase, pendents, pot i premis; desa resultats i finalitza la porra en una sola transacció.
+
+## Realtime segur
+
+`pool_revisions` és l’única taula publicada a `supabase_realtime`. El payload conté només:
+
+- `pool_slug` públic;
+- `revision`;
+- `is_public`;
+- `updated_at`.
+
+No publica apostes, participants, UUID, pagaments, tokens, marcadors ni premis. Triggers incrementen atòmicament la revisió quan canvien porra, especials, participants, apostes, partit o premis. El navegador escolta la revisió de l’slug actiu i torna a carregar l’estat mitjançant `get_public_pool_state`. El repositori elimina el canal en canviar de porra i reconnecta després d’errors o timeouts.
+
+## Dades públiques i privades
+
+Públiques:
+
+- configuració visible de la porra, equips, horaris i especials;
+- ocupació agregada per casella;
+- mètriques agregades;
+- resultats i noms o àlies introduïts voluntàriament pels guanyadors pagats.
+
+Privades:
+
+- UUID de participants i apostes;
+- hash i token de tracking;
+- estat individual pendent de pagament;
+- instruccions de pagament, excepte després de crear una reserva o dins del tracking privat;
+- perfils administratius i dades internes de premis.
+
+No s’han d’introduir telèfons, comptes personals ni altra informació sensible a les instruccions de pagament de la beta.
+
+## Variables d’entorn
+
+Frontend públic:
+
+- `mode`;
+- `supabaseUrl`;
+- `supabasePublishableKey`.
+
+No s’ha d’enviar mai al navegador cap secret, contrasenya, `service_role` o secret key.
 
 ## API-Football
 
-`functions/sync-live-score` és opcional i no té cap cron actiu. Requereix secrets de servidor i un `fixtureId` explícit. Qualsevol error queda registrat a `match_states.provider_error` i no bloqueja els controls manuals.
+API-Football queda completament desactivada per a la beta. No hi ha cap cron actiu i no s’ha de desplegar `functions/sync-live-score` ni configurar `API_FOOTBALL_KEY`, `SYNC_SECRET` o `SUPABASE_SERVICE_ROLE_KEY`.
+
+## Requisit antiabús pendent
+
+La base garanteix integritat i concurrència, però encara no limita quantes reserves pot intentar crear una mateixa persona o IP. Una mesura antiabús —invitació, CAPTCHA o rate limit— és un requisit bloquejant abans del desplegament compartit de la beta.
+
+## Procés previst per a `porra-live-beta`
+
+1. Disposar de Supabase CLI i Docker locals.
+2. Iniciar una base local descartable i aplicar-hi la migració completa.
+3. Executar proves de rols `anon`, autenticat no administrador i administrador, concurrència i advisors.
+4. Revisar que la migració local queda neta i repetible.
+5. Amb aprovació explícita, crear `porra-live-beta` a l’organització i regió acordades.
+6. Vincular la CLI al projecte nou, mai a `finalissima-porra`.
+7. Aplicar la migració versionada amb `supabase db push`.
+8. Crear l’únic usuari Auth administrador i inserir el seu UUID a `admin_profiles` des d’un entorn privilegiat.
+9. Configurar al frontend només URL i publishable key.
+10. Repetir proves RLS, Realtime i privacitat abans de desplegar.
+
+No s’ha de confirmar cap cost, crear cap projecte ni aplicar aquesta migració al núvol fins a rebre aprovació expressa.
