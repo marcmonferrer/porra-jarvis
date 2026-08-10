@@ -152,6 +152,7 @@ set search_path = public
 as $$
 declare
   target_pool public.pools%rowtype;
+  target_phase text;
   active_cell_count integer;
   active_participant_count integer;
 begin
@@ -252,6 +253,10 @@ begin
   if not found then raise exception 'Pool not found'; end if;
   if target_pool.status <> 'open' or now() >= target_pool.closes_at then
     raise exception 'Pool is closed';
+  end if;
+  select phase into target_phase from public.match_states where pool_id = target_pool_id;
+  if target_phase in ('first', 'half', 'second', 'final') then
+    raise exception 'Bets are closed because the match has started';
   end if;
   foreach target_cell in array (select array_agg(value order by value) from unnest(selected_cells) value)
   loop

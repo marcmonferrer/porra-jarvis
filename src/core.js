@@ -79,11 +79,16 @@ export function participantBets(bets, participantId) {
   return activeBets(bets).filter(bet => bet.participantId === participantId);
 }
 
-export function validateSelection({ pool, bets, participantId, cellKeys, now = new Date() }) {
+export function hasMatchStarted(match) {
+  return ["first", "half", "second", "final"].includes(match?.phase);
+}
+
+export function validateSelection({ pool, bets, participantId, cellKeys, match, now = new Date() }) {
   const errors = [];
   const unique = [...new Set(cellKeys)];
   if (pool.status !== "open") errors.push("La porra no està oberta.");
   if (pool.closesAt && now >= new Date(pool.closesAt)) errors.push("El termini de participació ha finalitzat.");
+  if (hasMatchStarted(match)) errors.push("Les apostes estan tancades. El partit ja ha començat.");
   if (cellKeys.length < 1 || cellKeys.length > MAX_BETS_PER_PARTICIPANT) {
     errors.push("Cal seleccionar una o dues apostes.");
   }

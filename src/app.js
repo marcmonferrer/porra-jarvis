@@ -16,6 +16,7 @@ import {
   winningBetsText
 } from "./core.js";
 import { demoResetButtonMarkup, isDemoResetAvailable, preventAccidentalSubmit, resetDemoSafely, validatePoolBeforePublish } from "./demo-reset.js";
+import { halfTimeCellState, halfTimeOutcome, halfTimeResultCell, participationState, trackingHalfTimeState } from "./public-experience.js";
 import { createRepository } from "./repository.js";
 
 const app = document.querySelector("#app");
@@ -87,9 +88,17 @@ function renderTeam(team, image, side) {
   return `<div class="team team--${side}">${visual}<strong>${escapeHtml(team)}</strong><small>${side === "home" ? "Primer marcador · local" : "Segon marcador · visitant"}</small></div>`;
 }
 
-function hero(pool) {
+function publicMatchStatus(pool, match) {
+  if (["first", "second"].includes(match?.phase)) return { label: "En joc", className: "status-live" };
+  if (match?.phase === "half") return { label: "Descans", className: "status-live" };
+  if (match?.phase === "final") return { label: "Final", className: "status-finished" };
+  return { label: statusLabel(pool.status), className: `status-${pool.status}` };
+}
+
+function hero(pool, match) {
+  const status = publicMatchStatus(pool, match);
   return `<section class="match-hero">
-    <div class="match-hero__top"><span class="status-pill status-${pool.status}">${statusLabel(pool.status)}</span><span>${formatDateTime(pool.matchAt)}</span></div>
+    <div class="match-hero__top"><span class="status-pill ${status.className}">${status.label}</span><span>${formatDateTime(pool.matchAt)}</span></div>
     <h1>${escapeHtml(pool.title)}</h1>
     <div class="versus">${renderTeam(pool.homeTeam, pool.homeImage, "home")}<span>VS</span>${renderTeam(pool.awayTeam, pool.awayImage, "away")}</div>
     <p class="close-note">Participacions fins a ${formatDateTime(pool.closesAt)} · ${formatMoney(pool.priceCents)} per aposta</p>
@@ -106,7 +115,7 @@ function metricsMarkup(metrics) {
 }
 
 function gridMarkup(state, interactive = true) {
-  const { pool, bets } = state;
+  const { pool, bets, match } = state;
   const headers = Array.from({ length: 5 }, (_, index) => `<span class="grid-axis">${index}</span>`).join("");
   const rows = Array.from({ length: 5 }, (_, away) => {
     const cells = Array.from({ length: 5 }, (_, home) => {
@@ -115,10 +124,12 @@ function gridMarkup(state, interactive = true) {
       const available = 2 - occupancy;
       const selected = selectedCells.includes(key);
       const special = isSpecialCell(key);
-      return `<button class="bet-cell ${special ? "is-special" : ""} ${selected ? "is-selected" : ""} ${available === 0 ? "is-full" : ""}"
+      const halfTimeCell = halfTimeCellState(match, key);
+      return `<button class="bet-cell ${special ? "is-special" : ""} ${selected ? "is-selected" : ""} ${available === 0 ? "is-full" : ""} ${halfTimeCell.isResult ? "is-half-result" : ""}"
         type="button" data-cell="${key}" ${!interactive || available === 0 ? "disabled" : ""}
-        aria-pressed="${selected}" aria-label="${escapeHtml(cellLabel(pool, key))}, ${available} places lliures">
+        aria-pressed="${selected}" aria-label="${escapeHtml(cellLabel(pool, key))}, ${available} places lliures${halfTimeCell.isResult ? ", resultat del descans" : ""}">
         <strong>${escapeHtml(cellLabel(pool, key))}</strong>
+        ${halfTimeCell.isResult ? `<span class="result-badge" aria-label="Resultat del descans">✓ Descans</span>` : ""}
         ${special ? `<small>${escapeHtml(pool.specials.find(item => item.cellKey === key)?.description || "Aposta especial")}</small>` : ""}
         <span class="occupancy-dots" aria-hidden="true"><i class="${occupancy > 0 ? "filled" : ""}"></i><i class="${occupancy > 1 ? "filled" : ""}"></i></span>
         <em>${available === 0 ? "Completa" : `${available} ${available === 1 ? "plaça" : "places"}`}</em>
@@ -128,7 +139,21 @@ function gridMarkup(state, interactive = true) {
   }).join("");
   return `<div class="score-key"><span>${escapeHtml(pool.homeTeam)} = primer marcador →</span><span>${escapeHtml(pool.awayTeam)} = segon marcador ↓</span></div>
     <div class="score-grid"><span class="grid-corner">LOCAL<br>VISITANT</span>${headers}${rows}</div>
-    <div class="grid-legend"><span><i></i>Dues places</span><span><i class="one"></i>Una ocupada</span><span><i class="two"></i>Completa</span><span><i class="selected"></i>Selecció temporal</span></div>`;
+    <div class="grid-legend"><span><i></i>Dues places</span><span><i class="one"></i>Una ocupada</span><span><i class="two"></i>Completa</span><span><i class="selected"></i>Selecció temporal</span>${halfTimeResultCell(match) ? `<span><i class="half-result">✓</i>Resultat del descans</span>` : ""}</div>`;
+}
+
+function halfTimeMarkup(state) {
+  if (state.match?.phase !== "half") return "";
+  const outcome = halfTimeOutcome(state);
+  if (!outcome) return "";
+  const winnerTitle = outcome.winners.length === 1 ? "Guanyador del descans" : "Guanyadors del descans";
+  const winnerMarkup = outcome.winners.length
+    ? `<div class="half-time-winners"><h3>${winnerTitle}</h3>${outcome.winners.map(winner => `<p><strong>${escapeHtml(winner.name)}</strong><span>— ${formatMoney(winner.cents)}</span></p>`).join("")}</div>`
+    : `<div class="half-time-winners"><h3>No hi ha cap aposta guanyadora al descans</h3></div>`;
+  return `<section class="half-time-summary panel" aria-labelledby="half-time-title">
+    <div class="half-time-result"><span>DESCANS</span><h2 id="half-time-title">${escapeHtml(state.pool.homeTeam)} <strong>${state.match.halfHome}–${state.match.halfAway}</strong> ${escapeHtml(state.pool.awayTeam)}</h2></div>
+    ${winnerMarkup}<p class="half-time-rule">${escapeHtml(outcome.ruleText)}</p>
+  </section>`;
 }
 
 async function resolveActivePool() {
@@ -149,25 +174,27 @@ async function renderPublic() {
   currentPoolId = pool.id;
   ensureRealtime(pool.id);
   const state = await repository.getPoolState(pool.id);
-  const canPlay = pool.status === "open" && (!pool.closesAt || Date.now() < new Date(pool.closesAt).getTime());
+  const participation = participationState(state);
+  const canPlay = participation.open;
+  if (!canPlay) selectedCells = [];
   const selectionCost = selectedCells.length * pool.priceCents;
   const selectionPool = selectedCells.length * pool.poolPerBetCents;
-  app.innerHTML = `${hero(pool)}${metricsMarkup(state.metrics)}
+  app.innerHTML = `${hero(pool, state.match)}${halfTimeMarkup(state)}${metricsMarkup(state.metrics)}
     <div class="public-layout">
       <section class="panel bet-panel">
-        <div class="section-heading"><div><span>1 · Tria una o dues apostes</span><h2>Graella de resultats i especials</h2></div><strong>${state.metrics.freePlaces} places lliures</strong></div>
+        <div class="section-heading"><div><span>${canPlay ? "1 · Tria una o dues apostes" : "Seguiment del partit"}</span><h2>Graella de resultats i especials</h2></div><strong>${state.metrics.freePlaces} places lliures</strong></div>
         ${gridMarkup(state, canPlay)}
       </section>
       <aside class="panel checkout-panel">
-        <span class="eyebrow">2 · Confirma la participació</span>
-        <h2>La teva selecció</h2>
+        <span class="eyebrow">${canPlay ? "2 · Confirma la participació" : "Seguiment en directe"}</span>
+        <h2>${canPlay ? "La teva selecció" : "Partit en curs"}</h2>
         ${canPlay ? `<label>Nom del participant<input name="participantName" maxlength="50" autocomplete="name" placeholder="El teu nom"></label>
           <div class="selection-summary">${selectedCells.length ? selectedCells.map(key => `<span>${escapeHtml(cellLabel(pool, key))}</span>`).join("") : `<p>Selecciona una o dues caselles diferents.</p>`}</div>
           <dl><div><dt>Cost total</dt><dd>${formatMoney(selectionCost)}</dd></div><div><dt>Destinat al pot</dt><dd>${formatMoney(selectionPool)}</dd></div></dl>
           <button class="button primary wide" data-action="confirm-reservation" ${selectedCells.length ? "" : "disabled"}>Confirmar apostes</button>
           <small>La selecció rosa encara no ocupa plaça. En confirmar, la reserva queda pendent de verificar.</small>`
-          : `<div class="notice"><strong>Participacions tancades</strong><p>Pots continuar consultant el marcador i la teva aposta privada.</p></div>`}
-        <button class="button secondary wide" data-action="share-pool">Compartir per WhatsApp</button>
+          : `<div class="notice closed-bets-notice"><strong>Participacions tancades</strong><p>${escapeHtml(participation.message)}</p></div><button class="button primary wide" type="button" data-view="tracking">La meva aposta</button>`}
+        <button class="button secondary wide" type="button" data-action="share-pool">Compartir per WhatsApp</button>
       </aside>
     </div>
     ${liveMarkup(state)}`;
@@ -194,7 +221,7 @@ async function confirmReservation() {
     selectedCells = [];
     const state = await repository.getPoolState(currentPoolId);
     const trackUrl = `${location.origin}${location.pathname}?track=${encodeURIComponent(lastTrackingToken)}#tracking`;
-    app.innerHTML = `${hero(state.pool)}<section class="success-state panel">
+    app.innerHTML = `${hero(state.pool, state.match)}<section class="success-state panel">
       <span class="success-icon">✓</span><p class="eyebrow">Reserva creada</p><h2>Pendent de verificar pagament</h2>
       <p>Has reservat ${result.bets?.length || 0} ${result.bets?.length === 1 ? "aposta" : "apostes"} per un total de <strong>${formatMoney((result.bets?.length || 0) * state.pool.priceCents)}</strong>.</p>
       <div class="payment-box"><strong>Instruccions de pagament</strong><p>${escapeHtml(state.pool.paymentInstructions || "L’administrador encara no ha configurat les instruccions.")}</p></div>
@@ -404,6 +431,7 @@ async function renderTracking() {
     return;
   }
   const total = tracking.bets.reduce((sum, bet) => sum + tracking.pool.priceCents, 0);
+  const participation = participationState({ pool: tracking.pool, match: tracking.match });
   const chance = bet => {
     if (bet.paymentStatus === "released") return "Reserva alliberada";
     if (bet.paymentStatus === "pending") return "Sense opcions fins que es confirmi el pagament";
@@ -412,13 +440,13 @@ async function renderTracking() {
       const status = tracking.match.specialStatuses?.[bet.cellKey] || "pending";
       return status === "completed" ? "Guanyadora provisional" : status === "failed" ? "Ja no té opcions" : "Encara té opcions";
     }
-    const halfKey = tracking.match.halfHome == null ? null : resultCell(tracking.match.halfHome, tracking.match.halfAway);
     const finalKey = tracking.match.finalHome == null ? null : resultCell(tracking.match.finalHome, tracking.match.finalAway);
-    if (bet.cellKey === halfKey || bet.cellKey === finalKey) return "Guanyadora provisional";
+    if (bet.cellKey === finalKey) return "Guanyadora provisional";
     return finalKey ? "Sense premi" : "Encara té opcions";
   };
-  app.innerHTML = `${hero(tracking.pool)}<section class="tracking-card panel"><div class="section-heading"><div><span>Seguiment privat</span><h2>${escapeHtml(tracking.participant.name)}</h2></div><strong>${formatMoney(total)}</strong></div>
-    <div class="tracking-bets">${tracking.bets.map(bet => `<article><div><strong>${escapeHtml(cellLabel(tracking.pool, bet.cellKey))}</strong><span class="payment-status ${bet.paymentStatus}">${paymentLabel(bet.paymentStatus)}</span></div><dl><div><dt>Estat</dt><dd>${bet.paymentStatus === "paid" ? "Participa en els premis" : bet.paymentStatus === "pending" ? "Pendent de verificar pagament" : "Reserva alliberada"}</dd></div><div><dt>Opcions</dt><dd>${chance(bet)}</dd></div><div><dt>Premi ${tracking.final ? "definitiu" : "provisional"}</dt><dd>${formatMoney(bet.prizeCents || 0)}</dd></div></dl></article>`).join("")}</div>
+  app.innerHTML = `${hero(tracking.pool, tracking.match)}<section class="tracking-card panel"><div class="section-heading"><div><span>Seguiment privat</span><h2>${escapeHtml(tracking.participant.name)}</h2></div><strong>${formatMoney(total)}</strong></div>
+    ${participation.open ? "" : `<div class="notice tracking-readonly"><strong>Mode només lectura</strong><p>${escapeHtml(participation.message)}</p></div>`}
+    <div class="tracking-bets">${tracking.bets.map(bet => { const halfState = trackingHalfTimeState({ pool: tracking.pool, match: tracking.match, bet }); return `<article><div><strong>${escapeHtml(cellLabel(tracking.pool, bet.cellKey))}</strong><span class="payment-status ${bet.paymentStatus}">${paymentLabel(bet.paymentStatus)}</span></div><dl><div><dt>Estat</dt><dd>${bet.paymentStatus === "paid" ? "Participa en els premis" : bet.paymentStatus === "pending" ? "Pendent de verificar pagament" : "Reserva alliberada"}</dd></div><div><dt>Descans</dt><dd>${halfState.label}${halfState.won ? ` · ${formatMoney(bet.halfPrizeCents)}` : ""}</dd></div><div><dt>Opcions</dt><dd>${chance(bet)}</dd></div><div><dt>Premi ${tracking.final ? "definitiu" : "provisional"}</dt><dd>${formatMoney(bet.prizeCents || 0)}</dd></div></dl></article>`; }).join("")}</div>
     ${liveMarkup({ pool: tracking.pool, match: tracking.match })}
     <p class="privacy-note">Aquest enllaç és privat. No el comparteixis públicament.</p></section>`;
 }

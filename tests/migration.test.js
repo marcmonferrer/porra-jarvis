@@ -18,5 +18,6 @@ test("la migració protegeix les escriptures públiques amb RLS i RPC", async ()
   assert.match(sql, /create policy "bets_public_read"/);
   assert.match(sql, /revoke insert, update, delete on public\.participants, public\.bets/);
   assert.match(sql, /create_public_reservation/);
+  assert.match(sql, /target_phase in \('first', 'half', 'second', 'final'\)/);
   assert.match(sql, /security definer/);
 });

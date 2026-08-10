@@ -7,6 +7,7 @@ import {
   validateMatchUpdate,
   validateSelection
 } from "./core.js";
+import { halfTimeOutcome, participationState } from "./public-experience.js";
 
 const STORAGE_KEY = "porra-live-demo-v1";
 
@@ -125,7 +126,8 @@ export class DemoRepository {
       pool,
       bets: this.data.bets.filter(bet => bet.poolId === poolId),
       participantId,
-      cellKeys
+      cellKeys,
+      match: this.data.matches[poolId]
     });
     if (!validation.valid) throw new Error(validation.errors[0]);
     const token = trackingToken();
@@ -157,13 +159,15 @@ export class DemoRepository {
     const state = await this.getPoolState(participant.poolId);
     const bets = state.bets.filter(bet => bet.participantId === participant.id);
     const preview = state.prizeResult || calculatePrizes({ pool: state.pool, bets: state.bets, match: state.match });
+    const halfTime = halfTimeOutcome(state);
     const awards = preview.awards || [];
     return {
       pool: state.pool,
       participant,
       bets: bets.map(bet => ({
         ...bet,
-        prizeCents: awards.find(award => award.betId === bet.id)?.totalCents || 0
+        prizeCents: awards.find(award => award.betId === bet.id)?.totalCents || 0,
+        halfPrizeCents: halfTime?.winners.find(winner => winner.betId === bet.id)?.cents || 0
       })),
       match: state.match,
       final: state.pool.status === "finished"
@@ -394,6 +398,10 @@ export class SupabaseRepository {
   }
 
   async createReservation({ poolId, name, cellKeys }) {
+    const state = await this.getPoolState(poolId);
+    if (!state) throw new Error("No s'ha trobat la porra.");
+    const participation = participationState(state);
+    if (!participation.open) throw new Error(participation.message);
     const { data, error } = await this.client.rpc("create_public_reservation", {
       target_pool_id: poolId,
       participant_name: name,
@@ -406,14 +414,16 @@ export class SupabaseRepository {
   async getTracking(token) {
     const { data, error } = await this.client.rpc("get_tracking_state", { raw_tracking_token: token });
     if (error) throw error;
-    if (!data || data.final) return data;
+    if (!data) return data;
     const state = await this.getPoolState(data.pool.id);
-    const preview = calculatePrizes({ pool: state.pool, bets: state.bets, match: state.match });
+    const preview = state.prizeResult || calculatePrizes({ pool: state.pool, bets: state.bets, match: state.match });
+    const halfTime = halfTimeOutcome(state);
     return {
       ...data,
       bets: data.bets.map(bet => ({
         ...bet,
-        prizeCents: preview.awards.find(award => award.betId === bet.id)?.totalCents || 0
+        prizeCents: bet.prizeCents ?? (preview.awards.find(award => award.betId === bet.id)?.totalCents || 0),
+        halfPrizeCents: halfTime?.winners.find(winner => winner.betId === bet.id)?.cents || 0
       }))
     };
   }
