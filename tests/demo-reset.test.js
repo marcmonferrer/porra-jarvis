@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   DEMO_RESET_CONFIRMATION,
+  demoResetButtonMarkup,
   isDemoResetAvailable,
-  resetDemoSafely
+  preventAccidentalSubmit,
+  resetDemoSafely,
+  validatePoolBeforePublish
 } from "../src/demo-reset.js";
 
 function harness({ mode = "demo", confirmed = true } = {}) {
@@ -31,6 +34,25 @@ test("el control de reinici només està disponible en mode demo", () => {
   assert.equal(isDemoResetAvailable({ mode: "demo", resetDemo() {} }), true);
   assert.equal(isDemoResetAvailable({ mode: "supabase", resetDemo() {} }), false);
   assert.equal(isDemoResetAvailable({ mode: "demo" }), false);
+});
+
+test("el botó de reinici mai envia ni propaga el formulari", () => {
+  const markup = demoResetButtonMarkup();
+  assert.match(markup, /type="button"/);
+  assert.match(markup, /data-action="reset-demo"/);
+  const calls = [];
+  preventAccidentalSubmit({
+    preventDefault() { calls.push("preventDefault"); },
+    stopPropagation() { calls.push("stopPropagation"); }
+  });
+  assert.deepEqual(calls, ["preventDefault", "stopPropagation"]);
+});
+
+test("Publicar conserva la validació nativa dels camps obligatoris", () => {
+  let validations = 0;
+  assert.equal(validatePoolBeforePublish({ reportValidity() { validations += 1; return false; } }), false);
+  assert.equal(validatePoolBeforePublish({ reportValidity() { validations += 1; return true; } }), true);
+  assert.equal(validations, 2);
 });
 
 test("cancel·lar el reinici no modifica cap estat", async () => {

@@ -15,7 +15,7 @@ import {
   validateMatchUpdate,
   winningBetsText
 } from "./core.js";
-import { isDemoResetAvailable, resetDemoSafely } from "./demo-reset.js";
+import { demoResetButtonMarkup, isDemoResetAvailable, preventAccidentalSubmit, resetDemoSafely, validatePoolBeforePublish } from "./demo-reset.js";
 import { createRepository } from "./repository.js";
 
 const app = document.querySelector("#app");
@@ -240,8 +240,8 @@ function poolForm(pool = {}) {
 }
 
 function adminPoolActions(pool) {
-  const poolActions = pool ? `<button class="button primary" data-action="publish-pool" ${pool.status === "draft" ? "" : "disabled"}>Publicar</button><button class="button" data-action="toggle-pool" ${["open","closed"].includes(pool.status) ? "" : "disabled"}>${pool.status === "open" ? "Tancar participacions" : pool.status === "closed" ? "Reobrir" : "Estat bloquejat"}</button><button class="button secondary" data-view="public">Obrir vista pública</button>` : "";
-  const resetAction = isDemoResetAvailable(repository) ? `<button class="button danger demo-reset" data-action="reset-demo">Reiniciar demo</button>` : "";
+  const poolActions = pool ? `<button class="button primary" type="button" data-action="publish-pool" ${pool.status === "draft" ? "" : "disabled"}>Publicar</button><button class="button" type="button" data-action="toggle-pool" ${["open","closed"].includes(pool.status) ? "" : "disabled"}>${pool.status === "open" ? "Tancar participacions" : pool.status === "closed" ? "Reobrir" : "Estat bloquejat"}</button><button class="button secondary" type="button" data-view="public">Obrir vista pública</button>` : "";
+  const resetAction = isDemoResetAvailable(repository) ? demoResetButtonMarkup() : "";
   return poolActions || resetAction ? `<div class="action-row">${poolActions}${resetAction}</div>` : "";
 }
 
@@ -451,6 +451,17 @@ function poolData(form) {
 }
 
 app.addEventListener("click", async event => {
+  if (event.target.closest("[data-action='reset-demo']")) {
+    preventAccidentalSubmit(event);
+    await resetDemoSafely({
+      repository,
+      confirmReset: message => window.confirm(message),
+      clearActiveState: clearDemoUiState,
+      reloadAdmin: renderAdmin,
+      notify
+    });
+    return;
+  }
   const viewButton = event.target.closest("[data-view]");
   if (viewButton) {
     view = viewButton.dataset.view;
@@ -484,22 +495,14 @@ app.addEventListener("click", async event => {
     document.querySelectorAll("[data-admin-panel]").forEach(panel => { panel.hidden = panel.dataset.adminPanel !== tab.dataset.adminTab; });
   }
   if (event.target.closest("[data-action='publish-pool']")) {
+    const form = app.querySelector("[data-form='pool']");
+    if (!validatePoolBeforePublish(form)) return;
     await repository.publishPool(currentPoolId); notify("Porra publicada i oberta."); await renderAdmin();
   }
   if (event.target.closest("[data-action='toggle-pool']")) {
     const state = await repository.getPoolState(currentPoolId);
     await repository.setPoolStatus(currentPoolId, state.pool.status === "open" ? "closed" : "open");
     notify(state.pool.status === "open" ? "Participacions reobertes." : "Participacions tancades."); await renderAdmin();
-  }
-  if (event.target.closest("[data-action='reset-demo']")) {
-    await resetDemoSafely({
-      repository,
-      confirmReset: message => window.confirm(message),
-      clearActiveState: clearDemoUiState,
-      reloadAdmin: renderAdmin,
-      notify
-    });
-    return;
   }
   const pay = event.target.closest("[data-pay-reservation]");
   if (pay) {
