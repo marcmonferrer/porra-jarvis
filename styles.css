@@ -38,6 +38,7 @@ a { color: inherit; }
 .mode-banner { display: flex; justify-content: center; gap: 12px; padding: 10px 20px; color: #5b3a00; background: #fff1be; border-bottom: 1px solid #ecd98f; font-size: .9rem; }
 
 .app-shell { width: min(1180px, calc(100% - 32px)); min-height: 55vh; margin: 32px auto 80px; }
+.app-shell.is-completed-public { margin-bottom: 0; }
 .panel { padding: 28px; border: 1px solid rgba(25, 48, 85, .08); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
 .loading-state, .empty-state, .error-state, .success-state, .tracking-entry { max-width: 720px; margin: 90px auto; text-align: center; }
 .loading-state h1, .empty-state h1, .error-state h1, .success-state h2, .tracking-entry h1 { margin: 14px 0 8px; font-size: clamp(1.8rem, 4vw, 3rem); }
@@ -281,6 +282,7 @@ td:last-child { display: flex; gap: 6px; }
   .main-nav button { padding: 9px 5px; font-size: .75rem; }
   .mode-banner { display: grid; gap: 2px; text-align: center; }
   .app-shell { width: min(100% - 20px, 1180px); margin-top: 16px; }
+  .app-shell.is-completed-public { margin-bottom: 0; }
   .panel { padding: 18px; border-radius: 18px; }
   .match-hero { padding: 22px 14px; border-radius: 20px; }
   .half-time-summary { padding: 20px 16px; text-align: center; }

@@ -40,6 +40,10 @@ export function publicPhasePresentation(match) {
   return { heading: "Partit en curs", eyebrow: "Seguiment en directe", showMinute: true };
 }
 
+export function showPublicLiveScorebar(match) {
+  return !["half", "final"].includes(match?.phase);
+}
+
 function publicParticipantForBet({ bet, participants = [], winnerParticipations = [] }) {
   const participant = participants.find(item => item.id === bet?.participantId);
   if (participant) return { key: `participant:${participant.id}`, name: participant.name };

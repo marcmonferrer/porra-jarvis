@@ -25,6 +25,7 @@ import {
   halfTimeResultCell,
   participationState,
   publicPhasePresentation,
+  showPublicLiveScorebar,
   trackingFinalState,
   trackingHalfTimeState
 } from "./public-experience.js";
@@ -231,6 +232,8 @@ async function renderPublic() {
   const state = await repository.getPoolState(pool.id);
   const participation = participationState(state);
   const canPlay = participation.open;
+  const displayLiveScorebar = showPublicLiveScorebar(state.match);
+  app.classList.toggle("is-completed-public", !displayLiveScorebar);
   if (!canPlay) selectedCells = [];
   const selectionCost = selectedCells.length * pool.priceCents;
   const selectionPool = selectedCells.length * pool.poolPerBetCents;
@@ -253,7 +256,7 @@ async function renderPublic() {
         <button class="button secondary wide" type="button" data-action="share-pool">Compartir per WhatsApp</button>
       </aside>
     </div>
-    ${liveMarkup(state)}`;
+    ${displayLiveScorebar ? liveMarkup(state) : ""}`;
 }
 
 function liveMarkup(state) {
@@ -510,6 +513,7 @@ async function renderTracking() {
 
 async function render() {
   document.querySelectorAll("[data-view]").forEach(button => button.classList.toggle("active", button.dataset.view === view));
+  app.classList.remove("is-completed-public");
   app.setAttribute("aria-busy", "true");
   try {
     if (view === "admin") await renderAdmin();

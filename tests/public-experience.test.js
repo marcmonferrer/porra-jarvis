@@ -9,6 +9,7 @@ import {
   halfTimeOutcome,
   participationState,
   publicPhasePresentation,
+  showPublicLiveScorebar,
   trackingFinalState,
   trackingHalfTimeState
 } from "../src/public-experience.js";
@@ -147,6 +148,13 @@ test("Final substitueix Partit en curs i oculta el minut", () => {
   assert.equal(presentation.heading, "FINAL");
   assert.notEqual(presentation.heading, "Partit en curs");
   assert.equal(presentation.showMinute, false);
+});
+
+test("la barra pública només s'oculta al descans i al final", () => {
+  assert.equal(showPublicLiveScorebar(halfMatch({ phase: "first" })), true);
+  assert.equal(showPublicLiveScorebar(halfMatch({ phase: "second" })), true);
+  assert.equal(showPublicLiveScorebar(halfMatch({ phase: "half" })), false);
+  assert.equal(showPublicLiveScorebar(finalMatch()), false);
 });
 
 test("identifica inequívocament la casella del resultat final", () => {
