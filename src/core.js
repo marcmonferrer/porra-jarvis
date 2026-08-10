@@ -118,6 +118,112 @@ export function poolMetrics(pool, bets) {
   };
 }
 
+export function groupReservations({ pool, participants, bets }) {
+  const active = activeBets(bets);
+  return participants.map(participant => {
+    const reservationBets = active.filter(bet => bet.participantId === participant.id);
+    if (!reservationBets.length) return null;
+    return {
+      participantId: participant.id,
+      name: participant.name,
+      bets: reservationBets,
+      totalCents: reservationBets.length * pool.priceCents,
+      paymentStatus: reservationBets.every(bet => bet.paymentStatus === "paid") ? "paid" : "pending"
+    };
+  }).filter(Boolean);
+}
+
+export function winningBetsText(count) {
+  return `${count} ${count === 1 ? "aposta guanyadora" : "apostes guanyadores"}`;
+}
+
+export function groupPrizeAwards({ awards = [], bets = [], participants = [] }) {
+  const summaries = new Map();
+  for (const award of awards) {
+    const bet = bets.find(item => item.id === award.betId);
+    if (!bet) continue;
+    const participant = participants.find(item => item.id === bet.participantId);
+    const summary = summaries.get(bet.participantId) || {
+      participantId: bet.participantId,
+      name: participant?.name || "Participant",
+      totalCents: 0,
+      breakdown: {}
+    };
+    summary.totalCents += award.totalCents;
+    for (const item of award.breakdown || []) {
+      summary.breakdown[item.category] = (summary.breakdown[item.category] || 0) + item.cents;
+    }
+    summaries.set(bet.participantId, summary);
+  }
+  return [...summaries.values()].sort((a, b) => a.participantId.localeCompare(b.participantId));
+}
+
+export function finalReceivesRedistribution(prizeResult) {
+  return Boolean(
+    prizeResult?.winners?.final?.length
+    && prizeResult.allocations.finalAvailable > prizeResult.allocations.finalBase
+  );
+}
+
+export function validateMatchUpdate({ match, pendingPlaces = 0 }) {
+  const normalized = {
+    ...match,
+    specialStatuses: { ...(match.specialStatuses || {}) }
+  };
+  const errors = [];
+  const warnings = [];
+  const scoreFields = ["currentHome", "currentAway", "halfHome", "halfAway", "finalHome", "finalAway"];
+  if (!Number.isInteger(normalized.minute) || normalized.minute < 0 || normalized.minute > 150) {
+    errors.push("El minut ha de ser un nombre enter entre 0 i 150.");
+  }
+  for (const field of scoreFields) {
+    const value = normalized[field];
+    if (value != null && (!Number.isInteger(value) || value < 0 || value > 99)) {
+      errors.push("Els marcadors han de ser nombres enters entre 0 i 99.");
+      break;
+    }
+  }
+  let syncedScore = false;
+  if (normalized.phase === "final") {
+    if ([normalized.halfHome, normalized.halfAway].some(value => value == null)) {
+      errors.push("Cal indicar el resultat al descans abans de passar a Final.");
+    }
+    if ([normalized.finalHome, normalized.finalAway].some(value => value == null)) {
+      errors.push("Cal indicar el resultat final abans de passar a Final.");
+    }
+    if (Object.values(normalized.specialStatuses).some(status => status === "pending")) {
+      errors.push("Cal resoldre totes les apostes especials abans de passar a Final.");
+    }
+    if (!errors.length && (normalized.currentHome !== normalized.finalHome || normalized.currentAway !== normalized.finalAway)) {
+      normalized.currentHome = normalized.finalHome;
+      normalized.currentAway = normalized.finalAway;
+      syncedScore = true;
+      warnings.push("El marcador actual s’ha sincronitzat amb el resultat final.");
+    }
+    if (pendingPlaces > 0) {
+      warnings.push(`Encara hi ha ${pendingPlaces} ${pendingPlaces === 1 ? "pagament pendent" : "pagaments pendents"}.`);
+    }
+  }
+  return { valid: errors.length === 0, errors, warnings, match: normalized, syncedScore };
+}
+
+export function buildHistorySummary(state) {
+  const paidCount = paidBets(state.bets).length;
+  const prizeResult = state.prizeResult;
+  const finalPotCents = prizeResult?.totalPotCents
+    ?? state.metrics.confirmedPoolCents + Number(state.pool.carryoverCents || 0);
+  const carryoverCents = prizeResult?.carryoverCents ?? 0;
+  return {
+    poolId: state.pool.id,
+    paidCount,
+    finalPotCents,
+    distributedCents: Math.max(0, finalPotCents - carryoverCents),
+    carryoverCents,
+    readOnly: state.pool.status === "finished",
+    winners: groupPrizeAwards({ awards: prizeResult?.awards, bets: state.bets, participants: state.participants })
+  };
+}
+
 function allocateEqual(totalCents, winnerIds) {
   const sorted = [...new Set(winnerIds)].sort();
   if (!sorted.length || totalCents <= 0) return new Map();

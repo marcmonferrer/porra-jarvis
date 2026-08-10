@@ -4,6 +4,7 @@ import {
   makeId,
   poolMetrics,
   slugify,
+  validateMatchUpdate,
   validateSelection
 } from "./core.js";
 
@@ -196,6 +197,36 @@ export class DemoRepository {
     return participant;
   }
 
+  async updateReservation(participantId, { name, bets }) {
+    const participant = this.data.participants.find(item => item.id === participantId);
+    if (!participant) throw new Error("No s'ha trobat la reserva.");
+    const reservationBets = this.data.bets.filter(item => item.participantId === participantId && item.paymentStatus !== "released");
+    const updates = bets.filter(update => reservationBets.some(bet => bet.id === update.id));
+    const pool = await this.getPool(participant.poolId);
+    const validation = validateSelection({
+      pool: { ...pool, status: "open", closesAt: "" },
+      bets: this.data.bets.filter(item => item.poolId === pool.id && item.participantId !== participantId),
+      participantId,
+      cellKeys: updates.map(item => item.cellKey)
+    });
+    if (!validation.valid) throw new Error(validation.errors[0]);
+    participant.name = name.trim();
+    participant.normalizedName = name.trim().toLocaleLowerCase("ca");
+    for (const update of updates) {
+      Object.assign(reservationBets.find(bet => bet.id === update.id), { cellKey: update.cellKey, updatedAt: new Date().toISOString() });
+    }
+    this.write();
+    return { participant, bets: reservationBets };
+  }
+
+  async updateReservationPayment(participantId, paymentStatus) {
+    const bets = this.data.bets.filter(item => item.participantId === participantId && item.paymentStatus !== "released");
+    if (!bets.length) throw new Error("No s'ha trobat la reserva.");
+    bets.forEach(bet => Object.assign(bet, { paymentStatus, updatedAt: new Date().toISOString() }));
+    this.write();
+    return bets;
+  }
+
   async updateMatch(poolId, patch) {
     this.data.matches[poolId] = { ...this.data.matches[poolId], ...patch };
     this.write();
@@ -207,6 +238,9 @@ export class DemoRepository {
     if (state.metrics.pendingPlaces > 0) {
       throw new Error("Cal confirmar o alliberar totes les apostes pendents abans de finalitzar.");
     }
+    if (state.match.phase !== "final") throw new Error("Cal desar el partit en fase Final abans de publicar els premis.");
+    const validation = validateMatchUpdate({ match: state.match });
+    if (!validation.valid) throw new Error(validation.errors[0]);
     const prizeResult = calculatePrizes({ pool: state.pool, bets: state.bets, match: state.match });
     this.data.prizeResults[poolId] = { ...prizeResult, finalizedAt: new Date().toISOString() };
     await this.setPoolStatus(poolId, "finished");
@@ -405,6 +439,32 @@ export class SupabaseRepository {
     return data;
   }
 
+  async updateReservation(participantId, { name, bets }) {
+    const participantResult = await this.client.from("participants").select("pool_id").eq("id", participantId).single();
+    if (participantResult.error) throw participantResult.error;
+    const state = await this.getPoolState(participantResult.data.pool_id);
+    const pool = state.pool;
+    const validation = validateSelection({
+      pool: { ...pool, status: "open", closesAt: "" },
+      bets: state.bets.filter(item => item.participantId !== participantId),
+      participantId,
+      cellKeys: bets.map(item => item.cellKey)
+    });
+    if (!validation.valid) throw new Error(validation.errors[0]);
+    await this.updateParticipant(participantId, name);
+    await Promise.all(bets.map(bet => this.updateBet(bet.id, { cellKey: bet.cellKey })));
+    return { participantId, bets };
+  }
+
+  async updateReservationPayment(participantId, paymentStatus) {
+    const payload = { payment_status: paymentStatus, updated_at: new Date().toISOString() };
+    if (paymentStatus === "paid") payload.paid_at = new Date().toISOString();
+    if (paymentStatus === "released") payload.released_at = new Date().toISOString();
+    const { data, error } = await this.client.from("bets").update(payload).eq("participant_id", participantId).neq("payment_status", "released").select();
+    if (error) throw error;
+    return data;
+  }
+
   async updateMatch(poolId, patch) {
     const matchPayload = {
       pool_id: poolId, phase: patch.phase, minute: patch.minute,
@@ -428,6 +488,9 @@ export class SupabaseRepository {
   async finalizePool(poolId) {
     const state = await this.getPoolState(poolId);
     if (state.metrics.pendingPlaces > 0) throw new Error("Cal confirmar o alliberar totes les apostes pendents abans de finalitzar.");
+    if (state.match.phase !== "final") throw new Error("Cal desar el partit en fase Final abans de publicar els premis.");
+    const validation = validateMatchUpdate({ match: state.match });
+    if (!validation.valid) throw new Error(validation.errors[0]);
     const session = await this.getSession();
     const result = calculatePrizes({ pool: state.pool, bets: state.bets, match: state.match });
     const saved = await this.client.from("prize_results").upsert({

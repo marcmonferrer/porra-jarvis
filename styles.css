@@ -142,6 +142,8 @@ dd { margin: 0; font-weight: 800; }
 .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
 .span-2 { grid-column: span 2; }
 .pool-form fieldset, .match-form fieldset { margin: 22px 0; padding: 18px; border: 1px solid var(--line); border-radius: 16px; }
+.pool-form > .pool-form-fields { min-width: 0; margin: 0; padding: 0; border: 0; }
+.pool-form > .pool-form-fields[disabled], .match-form > .match-form-fields[disabled] { opacity: .72; }
 legend { padding: 0 8px; font-weight: 850; }
 .special-form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
 .special-form-grid > div { display: grid; gap: 10px; padding: 14px; border-radius: 14px; background: #fff7fb; }
@@ -155,8 +157,17 @@ td:last-child { display: flex; gap: 6px; }
 .payment-status.pending { color: #7a4b00; background: #fff0bd; }
 .payment-status.paid { color: #086044; background: #cdf5e7; }
 .payment-status.released { color: #687189; background: #e8edf3; }
+.reservation-list { display: grid; gap: 14px; margin-top: 20px; }
+.reservation-card { display: grid; gap: 14px; padding: 18px; border: 1px solid var(--line); border-radius: 16px; background: #fff; }
+.reservation-card__heading { display: grid; grid-template-columns: minmax(220px, 1fr) auto; align-items: end; gap: 18px; }
+.reservation-card__heading > div { display: flex; align-items: center; gap: 10px; }
+.reservation-card__heading > div strong { font-size: 1.15rem; }
+.reservation-selections { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.reservation-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.saved-indicator { color: var(--green); font-size: .8rem; font-weight: 800; }
 .empty-inline { padding: 32px; color: var(--muted); border: 1px dashed #c8d1df; border-radius: 14px; text-align: center; }
 .match-form { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.match-form > .match-form-fields { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; min-width: 0; margin: 0; padding: 0; border: 0; }
 .match-form fieldset { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 0; }
 .match-form .special-statuses { grid-column: span 2; grid-template-columns: repeat(2, 1fr); }
 .match-form .button { width: fit-content; }
@@ -164,15 +175,31 @@ td:last-child { display: flex; gap: 6px; }
 .prize-split article { display: grid; gap: 5px; padding: 18px; border-radius: 16px; background: #f5f8fc; }
 .prize-split span, .prize-split small { color: var(--muted); }
 .prize-split strong { font-size: 1.35rem; }
+.prize-split dl { display: grid; gap: 8px; margin: 8px 0 0; }
+.prize-split dl div { display: grid; gap: 2px; }
+.prize-split dt { color: var(--muted); font-size: .68rem; font-weight: 800; text-transform: uppercase; }
+.prize-split dd { margin: 0; font-size: .8rem; }
+.participant-prizes { display: grid; gap: 9px; margin-top: 22px; }
+.participant-prizes .section-heading { margin-bottom: 2px; }
+.participant-prizes article { padding: 14px; border-radius: 12px; background: #edf8f4; }
+.participant-prizes article > div { display: flex; justify-content: space-between; gap: 12px; }
+.participant-prizes article p { margin: 5px 0 0; color: var(--muted); font-size: .8rem; }
 .award-list { display: grid; gap: 8px; margin: 18px 0; }
 .award-list div { display: flex; justify-content: space-between; padding: 12px; border-radius: 10px; background: #edf8f4; }
 .review-check { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--line); }
 .review-check label { display: flex; grid-template-columns: auto 1fr; align-items: center; }
 .review-check input { width: 18px; min-height: 18px; }
 .history-list { display: grid; gap: 10px; }
-.history-list button { display: grid; grid-template-columns: auto 1fr; gap: 5px 14px; padding: 14px; border: 1px solid var(--line); border-radius: 14px; text-align: left; background: #fff; }
-.history-list button strong { align-self: center; }
-.history-list button small { grid-column: 2; color: var(--muted); }
+.history-list article { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px 14px; padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: #fff; }
+.history-list article p { margin: 4px 0; color: var(--muted); }
+.history-list article small { color: var(--muted); }
+.history-detail { display: grid; gap: 18px; margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--line); }
+.history-metrics { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+.history-metrics article { display: grid; gap: 5px; padding: 14px; border-radius: 12px; background: #f5f8fc; }
+.history-metrics span { color: var(--muted); font-size: .72rem; }
+.history-section { padding: 16px; border: 1px solid var(--line); border-radius: 14px; }
+.history-section > p { margin-bottom: 0; color: var(--muted); }
+.read-only-note { margin-top: 18px; }
 
 .tracking-entry form { display: flex; align-items: end; gap: 10px; max-width: 560px; margin: 24px auto 0; text-align: left; }
 .tracking-entry label { flex: 1; }
@@ -198,6 +225,7 @@ td:last-child { display: flex; gap: 6px; }
   .live-panel { grid-template-columns: 1fr; text-align: center; }
   .live-results { justify-items: center; }
   .admin-tabs { overflow-x: auto; grid-template-columns: repeat(5, minmax(125px, 1fr)); }
+  .history-metrics { grid-template-columns: repeat(2, 1fr); }
 }
 
 @media (max-width: 680px) {
@@ -221,10 +249,14 @@ td:last-child { display: flex; gap: 6px; }
   .bet-cell small { font-size: .52rem; }
   .bet-cell em { display: none; }
   .grid-corner { font-size: .53rem; }
-  .form-grid, .special-form-grid, .match-form, .tracking-bets { grid-template-columns: 1fr; }
+  .form-grid, .special-form-grid, .match-form, .tracking-bets, .reservation-selections, .match-form > .match-form-fields { grid-template-columns: 1fr; }
   .span-2, .match-form .special-statuses { grid-column: auto; }
   .match-form fieldset, .match-form .special-statuses { grid-template-columns: 1fr 1fr; }
   .prize-split { grid-template-columns: 1fr; }
+  .reservation-card__heading, .history-list article { grid-template-columns: 1fr; align-items: stretch; }
+  .reservation-card__heading > div { justify-content: space-between; }
+  .history-list article .button { width: 100%; }
+  .history-metrics { grid-template-columns: 1fr; }
   .review-check, .admin-hero { align-items: stretch; flex-direction: column; }
   .tracking-entry form { display: grid; }
   .private-link { grid-template-columns: 1fr; }

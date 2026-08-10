@@ -1,13 +1,19 @@
 import {
   SPECIAL_CELLS,
+  buildHistorySummary,
   calculatePrizes,
+  finalReceivesRedistribution,
   formatDateTime,
   formatMoney,
+  groupPrizeAwards,
+  groupReservations,
   isSpecialCell,
   listCells,
   occupancyForCell,
   poolMetrics,
-  resultCell
+  resultCell,
+  validateMatchUpdate,
+  winningBetsText
 } from "./core.js";
 import { createRepository } from "./repository.js";
 
@@ -21,6 +27,8 @@ let currentPoolId = new URLSearchParams(location.search).get("pool");
 let selectedCells = [];
 let lastTrackingToken = new URLSearchParams(location.search).get("track") || "";
 let activeAdminTab = "pool";
+let historySummaryPoolId = null;
+let adminMatchNotice = "";
 let subscribedPoolId = null;
 let unsubscribeRealtime = null;
 
@@ -200,6 +208,7 @@ async function confirmReservation() {
 }
 
 function poolForm(pool = {}) {
+  const readOnly = pool.status === "finished";
   const specials = pool.specials || SPECIAL_CELLS.map((cellKey, index) => ({ cellKey, title: `Especial ${index + 1}`, description: "" }));
   const localDate = value => {
     if (!value) return "";
@@ -207,6 +216,7 @@ function poolForm(pool = {}) {
     return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
   };
   return `<form class="pool-form" data-form="pool">
+    <fieldset class="pool-form-fields" ${readOnly ? "disabled" : ""}>
     <input type="hidden" name="id" value="${escapeHtml(pool.id || "")}">
     <div class="form-grid">
       <label class="span-2">Títol<input required name="title" value="${escapeHtml(pool.title || "")}" placeholder="Nom de la porra"></label>
@@ -223,7 +233,8 @@ function poolForm(pool = {}) {
       <label class="span-2">Instruccions de pagament<textarea required name="paymentInstructions" placeholder="Configura el destinatari i el concepte fora del codi">${escapeHtml(pool.paymentInstructions || "")}</textarea></label>
     </div>
     <fieldset><legend>Quatre apostes especials</legend><div class="special-form-grid">${specials.map((special, index) => `<div><strong>${special.cellKey}</strong><label>Nom<input required name="specialTitle${index}" value="${escapeHtml(special.title)}"></label><label>Condició<textarea name="specialDescription${index}">${escapeHtml(special.description || "")}</textarea></label></div>`).join("")}</div></fieldset>
-    <button class="button primary" type="submit">${pool.id ? "Desar canvis" : "Crear esborrany"}</button>
+    </fieldset>
+    ${readOnly ? `<div class="notice read-only-note"><strong>Mode només lectura</strong><p>Aquesta porra està finalitzada i no es pot modificar.</p></div>` : `<button class="button primary" type="submit">${pool.id ? "Desar canvis" : "Crear esborrany"}</button>`}
   </form>`;
 }
 
@@ -237,6 +248,7 @@ async function renderAdmin() {
   const pool = currentPoolId ? pools.find(item => item.id === currentPoolId) : pools[0];
   if (pool) currentPoolId = pool.id;
   const state = pool ? await repository.getPoolState(pool.id) : null;
+  const historyStates = await Promise.all(pools.map(item => repository.getPoolState(item.id)));
   app.innerHTML = `<section class="admin-hero"><div><span class="eyebrow">Panell d’administració</span><h1>Gestiona Porra Live</h1><p>Crea porres, valida pagaments i publica els premis des d’un únic lloc.</p></div><div class="admin-session">${repository.mode === "demo" ? "Sessió demo" : escapeHtml(session.user.email)}${repository.mode === "demo" ? "" : `<button data-action="admin-logout">Sortir</button>`}</div></section>
     <div class="admin-tabs" role="tablist">
       <button data-admin-tab="pool" class="${activeAdminTab === "pool" ? "active" : ""}">1. Porra</button><button data-admin-tab="bets" class="${activeAdminTab === "bets" ? "active" : ""}" ${pool ? "" : "disabled"}>2. Apostes</button><button data-admin-tab="match" class="${activeAdminTab === "match" ? "active" : ""}" ${pool ? "" : "disabled"}>3. Directe</button><button data-admin-tab="prizes" class="${activeAdminTab === "prizes" ? "active" : ""}" ${pool ? "" : "disabled"}>4. Premis</button><button data-admin-tab="history" class="${activeAdminTab === "history" ? "active" : ""}">5. Historial</button>
@@ -245,33 +257,43 @@ async function renderAdmin() {
     <section class="panel admin-panel" data-admin-panel="bets" ${activeAdminTab === "bets" ? "" : "hidden"}>${state ? adminBetsMarkup(state) : ""}</section>
     <section class="panel admin-panel" data-admin-panel="match" ${activeAdminTab === "match" ? "" : "hidden"}>${state ? adminMatchMarkup(state) : ""}</section>
     <section class="panel admin-panel" data-admin-panel="prizes" ${activeAdminTab === "prizes" ? "" : "hidden"}>${state ? adminPrizesMarkup(state) : ""}</section>
-    <section class="panel admin-panel" data-admin-panel="history" ${activeAdminTab === "history" ? "" : "hidden"}>${historyMarkup(pools)}</section>`;
+    <section class="panel admin-panel" data-admin-panel="history" ${activeAdminTab === "history" ? "" : "hidden"}>${historyMarkup(historyStates)}</section>`;
 }
 
 function adminBetsMarkup(state) {
-  const { pool, bets, participants } = state;
-  const rows = bets.filter(bet => bet.paymentStatus !== "released").map(bet => {
-    const person = participants.find(item => item.id === bet.participantId);
-    const options = listCells().map(cell => `<option value="${cell}" ${cell === bet.cellKey ? "selected" : ""}>${escapeHtml(cellLabel(pool, cell))}</option>`).join("");
-    return `<tr><td><input value="${escapeHtml(person?.name || "")}" data-participant-name="${bet.participantId}" aria-label="Nom del participant"></td><td><select data-bet-cell="${bet.id}" aria-label="Aposta">${options}</select></td><td><span class="payment-status ${bet.paymentStatus}">${paymentLabel(bet.paymentStatus)}</span></td><td><button class="button small" data-pay="${bet.id}" ${bet.paymentStatus === "paid" ? "disabled" : ""}>Confirmar</button><button class="button small danger" data-release="${bet.id}">Alliberar</button></td></tr>`;
+  const readOnly = state.pool.status === "finished";
+  const reservations = groupReservations(state);
+  const pendingReservations = reservations.filter(item => item.paymentStatus === "pending").length;
+  const paidReservations = reservations.filter(item => item.paymentStatus === "paid").length;
+  const cards = reservations.map(reservation => {
+    const selections = reservation.bets.map((bet, index) => {
+      const options = listCells().map(cell => `<option value="${cell}" ${cell === bet.cellKey ? "selected" : ""}>${escapeHtml(cellLabel(state.pool, cell))}</option>`).join("");
+      return `<label>Selecció ${index + 1}<select name="bet-${bet.id}" data-reservation-bet="${bet.id}" ${readOnly ? "disabled" : ""}>${options}</select></label>`;
+    }).join("");
+    return `<form class="reservation-card" data-form="reservation" data-participant-id="${reservation.participantId}">
+      <div class="reservation-card__heading"><label>Nom<input name="participantName" value="${escapeHtml(reservation.name)}" ${readOnly ? "disabled" : ""}></label><div><strong>${formatMoney(reservation.totalCents)}</strong><span class="payment-status ${reservation.paymentStatus}">${paymentLabel(reservation.paymentStatus)}</span></div></div>
+      <div class="reservation-selections">${selections}</div>
+      <div class="reservation-actions">${readOnly ? `<span class="saved-indicator">Només lectura</span>` : `<button class="button small" type="submit">Desar canvis</button>${reservation.paymentStatus === "paid" ? "" : `<button class="button small primary" type="button" data-pay-reservation="${reservation.participantId}">Confirmar pagament</button>`}<button class="button small danger" type="button" data-release-reservation="${reservation.participantId}" data-paid="${reservation.paymentStatus === "paid"}">Alliberar reserva</button>`}</div>
+    </form>`;
   }).join("");
-  return `<div class="section-heading"><div><span>Pagaments i reserves</span><h2>${state.metrics.pendingPlaces} pendents · ${state.metrics.paidPlaces} pagades</h2></div><strong>${state.metrics.freePlaces} places lliures</strong></div>${metricsMarkup(state.metrics)}${rows ? `<div class="table-wrap"><table><thead><tr><th>Participant</th><th>Aposta</th><th>Pagament</th><th>Accions</th></tr></thead><tbody>${rows}</tbody></table></div>` : `<div class="empty-inline">Encara no hi ha cap reserva.</div>`}`;
+  return `<div class="section-heading"><div><span>Pagaments i reserves</span><h2>${pendingReservations} ${pendingReservations === 1 ? "reserva pendent" : "reserves pendents"} · ${paidReservations} ${paidReservations === 1 ? "reserva pagada" : "reserves pagades"}</h2></div><strong>${state.metrics.freePlaces} places lliures</strong></div>${metricsMarkup(state.metrics)}${cards ? `<div class="reservation-list">${cards}</div>` : `<div class="empty-inline">Encara no hi ha cap reserva.</div>`}`;
 }
 
-function scoreInput(name, label, value, nullable = false) {
-  return `<label>${label}<input name="${name}" type="number" min="0" max="99" ${nullable ? "" : "required"} value="${value ?? ""}"></label>`;
+function scoreInput(name, label, value, nullable = false, max = 99) {
+  return `<label>${label}<input name="${name}" type="number" min="0" max="${max}" ${nullable ? "" : "required"} value="${value ?? ""}"></label>`;
 }
 
 function adminMatchMarkup(state) {
   const { pool, match } = state;
-  return `<div class="section-heading"><div><span>Control manual</span><h2>${escapeHtml(matchName(pool))}</h2></div><span>El proveïdor automàtic és opcional</span></div><form data-form="match" class="match-form">
+  const readOnly = pool.status === "finished";
+  return `<div class="section-heading"><div><span>Control manual</span><h2>${escapeHtml(matchName(pool))}</h2></div><span>El proveïdor automàtic és opcional</span></div>${adminMatchNotice ? `<div class="warning"><strong>Revisió del directe</strong><p>${escapeHtml(adminMatchNotice)}</p></div>` : ""}<form data-form="match" class="match-form"><fieldset class="match-form-fields" ${readOnly ? "disabled" : ""}>
     <label>Fase<select name="phase">${[["pre","Prepartit"],["first","Primera part"],["half","Descans"],["second","Segona part"],["final","Final"]].map(([value,label]) => `<option value="${value}" ${match.phase === value ? "selected" : ""}>${label}</option>`).join("")}</select></label>
-    ${scoreInput("minute", "Minut", match.minute)}
+    ${scoreInput("minute", "Minut", match.minute, false, 150)}
     <fieldset><legend>Marcador actual</legend>${scoreInput("currentHome", pool.homeTeam, match.currentHome)}${scoreInput("currentAway", pool.awayTeam, match.currentAway)}</fieldset>
     <fieldset><legend>Resultat exacte al descans</legend>${scoreInput("halfHome", pool.homeTeam, match.halfHome, true)}${scoreInput("halfAway", pool.awayTeam, match.halfAway, true)}</fieldset>
     <fieldset><legend>Resultat exacte final</legend>${scoreInput("finalHome", pool.homeTeam, match.finalHome, true)}${scoreInput("finalAway", pool.awayTeam, match.finalAway, true)}</fieldset>
-    <fieldset class="special-statuses"><legend>Estat dels especials</legend>${pool.specials.map(item => `<label>${escapeHtml(item.title)}<select name="special-${item.cellKey}">${[["pending","Pendent"],["completed","Complerta"],["failed","No complerta"]].map(([value,label]) => `<option value="${value}" ${match.specialStatuses?.[item.cellKey] === value ? "selected" : ""}>${label}</option>`).join("")}</select></label>`).join("")}</fieldset>
-    <button class="button primary" type="submit">Actualitzar directe</button>
+    <fieldset class="special-statuses"><legend>Estat dels especials</legend>${pool.specials.map(item => `<label>${escapeHtml(item.title)}<select name="special-${item.cellKey}">${[["pending","Pendent"],["completed","Completada"],["failed","No completada"]].map(([value,label]) => `<option value="${value}" ${match.specialStatuses?.[item.cellKey] === value ? "selected" : ""}>${label}</option>`).join("")}</select></label>`).join("")}</fieldset>
+    </fieldset>${readOnly ? `<span class="saved-indicator">Porra finalitzada · només lectura</span>` : `<button class="button primary" type="submit">Actualitzar directe</button>`}
   </form>`;
 }
 
@@ -283,21 +305,73 @@ function prizePreview(state) {
   }
 }
 
+function awardCentsFor(preview, category) {
+  return (preview?.awards || []).reduce((total, award) => total + (award.breakdown || [])
+    .filter(item => item.category === category)
+    .reduce((sum, item) => sum + item.cents, 0), 0);
+}
+
+function awardParticipantsFor(state, preview, category) {
+  const participantIds = new Set((preview?.awards || [])
+    .filter(award => award.breakdown?.some(item => item.category === category))
+    .map(award => state.bets.find(bet => bet.id === award.betId)?.participantId)
+    .filter(Boolean));
+  return [...participantIds].map(id => state.participants.find(person => person.id === id)?.name || "Participant");
+}
+
+function categoryPrizeMarkup(state, preview) {
+  const halfCell = state.match.halfHome == null ? "Per definir" : cellLabel(state.pool, resultCell(state.match.halfHome, state.match.halfAway));
+  const finalCell = state.match.finalHome == null ? "Per definir" : cellLabel(state.pool, resultCell(state.match.finalHome, state.match.finalAway));
+  const completedSpecials = state.pool.specials.filter(item => state.match.specialStatuses?.[item.cellKey] === "completed").map(item => item.title);
+  const finalCategory = preview?.winners?.final?.length ? "final" : "final-redistribution";
+  const categories = [
+    { key: "half", title: "Descans · 25%", condition: halfCell, winners: preview?.winners?.half?.length || 0 },
+    { key: "final", awardKey: finalCategory, title: `Final · 50%${finalReceivesRedistribution(preview) ? " + redistribució" : ""}`, condition: preview?.winners?.final?.length ? finalCell : "Franja redistribuïda", winners: preview?.winners?.final?.length || 0 },
+    { key: "special", title: "Especials · 25%", condition: completedSpecials.join(" · ") || "Cap condició completada", winners: preview?.winners?.special?.length || 0 }
+  ];
+  return categories.map(category => {
+    const awardKey = category.awardKey || category.key;
+    const participants = awardParticipantsFor(state, preview, awardKey);
+    return `<article><span>${category.title}</span><strong>${formatMoney(awardCentsFor(preview, awardKey))}</strong><small>${winningBetsText(category.winners)}</small><dl><div><dt>Aposta o condició</dt><dd>${escapeHtml(category.condition)}</dd></div><div><dt>Participants</dt><dd>${participants.length ? participants.map(escapeHtml).join(" · ") : "Sense guanyadors"}</dd></div></dl></article>`;
+  }).join("");
+}
+
+function participantPrizeMarkup(state, preview) {
+  const labels = { half: "Descans", final: "Final", special: "Especial", "final-redistribution": "Redistribució final" };
+  const summaries = groupPrizeAwards({ awards: preview?.awards, bets: state.bets, participants: state.participants });
+  if (!summaries.length) return `<div class="empty-inline">Sense apostes guanyadores: el pot queda acumulat.</div>`;
+  return `<section class="participant-prizes"><div class="section-heading"><div><span>Pagaments finals</span><h3>Resum per participació</h3></div></div>${summaries.map(summary => `<article><div><strong>${escapeHtml(summary.name)}</strong><b>${formatMoney(summary.totalCents)}</b></div><p>${Object.entries(summary.breakdown).map(([category, cents]) => `${labels[category] || category}: ${formatMoney(cents)}`).join(" · ")}</p></article>`).join("")}</section>`;
+}
+
 function adminPrizesMarkup(state) {
   const preview = state.prizeResult || prizePreview(state);
   const pendingWarning = state.metrics.pendingPlaces > 0 ? `<div class="warning"><strong>No es pot finalitzar</strong><p>Queden ${state.metrics.pendingPlaces} apostes pendents. Confirma-les o allibera-les.</p></div>` : "";
-  const participantName = betId => {
-    const bet = state.bets.find(item => item.id === betId);
-    return state.participants.find(person => person.id === bet?.participantId)?.name || "Participant";
-  };
-  return `<div class="section-heading"><div><span>Revisió abans de publicar</span><h2>Resultats i premis</h2></div><strong>${formatMoney(preview?.totalPotCents || 0)}</strong></div>${pendingWarning}
-    <div class="prize-split"><article><span>Descans · 25%</span><strong>${formatMoney(preview?.allocations?.halfBase || 0)}</strong><small>${preview?.winners?.half?.length || 0} apostes guanyadores</small></article><article><span>Final · 50% + redistribució</span><strong>${formatMoney(preview?.allocations?.finalAvailable || 0)}</strong><small>${preview?.winners?.final?.length || 0} apostes guanyadores</small></article><article><span>Especials · 25%</span><strong>${formatMoney(preview?.allocations?.specialBase || 0)}</strong><small>${preview?.winners?.special?.length || 0} apostes guanyadores</small></article></div>
-    ${preview?.awards?.length ? `<div class="award-list">${preview.awards.map(award => `<div><span>${escapeHtml(participantName(award.betId))}</span><strong>${formatMoney(award.totalCents)}</strong></div>`).join("")}</div>` : `<div class="empty-inline">Sense apostes guanyadores: el pot queda acumulat.</div>`}
-    <div class="review-check"><label><input type="checkbox" data-prize-review> He revisat el marcador, els especials, els pagaments i els imports.</label><button class="button primary" data-action="finalize-pool" disabled>Publicar premis definitius</button></div>`;
+  const finalized = state.pool.status === "finished";
+  return `<div class="section-heading"><div><span>${finalized ? "Resum definitiu" : "Revisió abans de publicar"}</span><h2>Resultats i premis</h2></div><strong>${formatMoney(preview?.totalPotCents || 0)}</strong></div>${pendingWarning}
+    <div class="prize-split">${categoryPrizeMarkup(state, preview)}</div>
+    ${participantPrizeMarkup(state, preview)}
+    ${finalized ? `<div class="notice read-only-note"><strong>Premis publicats</strong><p>Aquesta porra està finalitzada i el resum és només de lectura.</p></div>` : `<div class="review-check"><label><input type="checkbox" data-prize-review> He revisat el marcador, els especials, els pagaments i els imports.</label><button class="button primary" data-action="finalize-pool" disabled>Publicar premis definitius</button></div>`}`;
 }
 
-function historyMarkup(pools) {
-  return `<div class="section-heading"><div><span>Totes les edicions</span><h2>Historial de porres</h2></div><strong>${pools.length}</strong></div>${pools.length ? `<div class="history-list">${pools.map(pool => `<button data-pool="${pool.id}"><span class="status-pill status-${pool.status}">${statusLabel(pool.status)}</span><strong>${escapeHtml(pool.title)}</strong><small>${escapeHtml(matchName(pool))} · ${formatDateTime(pool.matchAt)}</small></button>`).join("")}</div>` : `<div class="empty-inline">Encara no hi ha historial.</div>`}`;
+function historyDetailMarkup(state) {
+  const summary = buildHistorySummary(state);
+  const preview = state.prizeResult || prizePreview(state);
+  const specials = state.pool.specials.map(item => `${item.title}: ${({ pending: "Pendent", completed: "Completada", failed: "No completada" })[state.match.specialStatuses?.[item.cellKey]] || "Pendent"}`).join(" · ");
+  return `<section class="history-detail"><div class="section-heading"><div><span>Resum històric · només lectura</span><h3>${escapeHtml(state.pool.title)}</h3></div><span class="status-pill status-${state.pool.status}">${statusLabel(state.pool.status)}</span></div>
+    <div class="history-metrics"><article><span>Resultat al descans</span><strong>${state.match.halfHome == null ? "—" : `${state.match.halfHome}–${state.match.halfAway}`}</strong></article><article><span>Resultat final</span><strong>${state.match.finalHome == null ? "—" : `${state.match.finalHome}–${state.match.finalAway}`}</strong></article><article><span>Pot final</span><strong>${formatMoney(summary.finalPotCents)}</strong></article><article><span>Total pagat</span><strong>${formatMoney(summary.distributedCents)}</strong></article><article><span>Acumulat</span><strong>${formatMoney(summary.carryoverCents)}</strong></article></div>
+    <div class="history-section"><strong>Especials</strong><p>${escapeHtml(specials)}</p></div>
+    <div class="history-section"><strong>Guanyadors i desglossament</strong>${participantPrizeMarkup(state, preview)}</div>
+  </section>`;
+}
+
+function historyMarkup(states) {
+  const sorted = [...states].sort((a, b) => b.pool.createdAt.localeCompare(a.pool.createdAt));
+  const selected = sorted.find(state => state.pool.id === historySummaryPoolId);
+  const editionText = `${sorted.length} ${sorted.length === 1 ? "edició" : "edicions"}`;
+  return `<div class="section-heading"><div><span>Totes les edicions</span><h2>Historial de porres</h2></div><strong>${editionText}</strong></div>${sorted.length ? `<div class="history-list">${sorted.map(state => {
+    const summary = buildHistorySummary(state);
+    return `<article><span class="status-pill status-${state.pool.status}">${statusLabel(state.pool.status)}</span><div><strong>${escapeHtml(state.pool.title)}</strong><p>${escapeHtml(matchName(state.pool))} · ${formatDateTime(state.pool.matchAt)}</p><small>${summary.paidCount} ${summary.paidCount === 1 ? "aposta pagada" : "apostes pagades"} · Pot final ${formatMoney(summary.finalPotCents)} · Repartit ${formatMoney(summary.distributedCents)} · Acumulat ${formatMoney(summary.carryoverCents)}</small></div><button class="button small" data-history-pool="${state.pool.id}">Veure resum</button></article>`;
+  }).join("")}</div>${selected ? historyDetailMarkup(selected) : ""}` : `<div class="empty-inline">Encara no hi ha historial.</div>`}`;
 }
 
 async function renderTracking() {
@@ -399,12 +473,23 @@ app.addEventListener("click", async event => {
     await repository.setPoolStatus(currentPoolId, state.pool.status === "open" ? "closed" : "open");
     notify(state.pool.status === "open" ? "Participacions reobertes." : "Participacions tancades."); await renderAdmin();
   }
-  const pay = event.target.closest("[data-pay]");
-  if (pay) { await repository.updateBet(pay.dataset.pay, { paymentStatus: "paid" }); notify("Pagament confirmat."); await renderAdmin(); }
-  const release = event.target.closest("[data-release]");
-  if (release) { await repository.updateBet(release.dataset.release, { paymentStatus: "released" }); notify("Reserva alliberada."); await renderAdmin(); }
+  const pay = event.target.closest("[data-pay-reservation]");
+  if (pay) {
+    await repository.updateReservationPayment(pay.dataset.payReservation, "paid");
+    notify("Pagament de tota la reserva confirmat.");
+    await renderAdmin();
+  }
+  const release = event.target.closest("[data-release-reservation]");
+  if (release) {
+    if (release.dataset.paid === "true" && !window.confirm("Aquesta reserva està pagada. Vols alliberar-la igualment?")) return;
+    await repository.updateReservationPayment(release.dataset.releaseReservation, "released");
+    notify("Reserva alliberada.");
+    await renderAdmin();
+  }
   const poolButton = event.target.closest("[data-pool]");
   if (poolButton) { currentPoolId = poolButton.dataset.pool; await renderAdmin(); }
+  const historyButton = event.target.closest("[data-history-pool]");
+  if (historyButton) { historySummaryPoolId = historyButton.dataset.historyPool; await renderAdmin(); }
   const review = event.target.closest("[data-prize-review]");
   if (review) app.querySelector("[data-action='finalize-pool']").disabled = !review.checked;
   if (event.target.closest("[data-action='finalize-pool']")) {
@@ -414,16 +499,6 @@ app.addEventListener("click", async event => {
   if (event.target.closest("[data-action='clear-tracking']")) { lastTrackingToken = ""; await renderTracking(); }
   if (event.target.closest("[data-action='admin-logout']")) { await repository.signOut(); notify("Sessió tancada."); await renderAdmin(); }
   if (event.target.closest("[data-action='retry']")) await render();
-});
-
-app.addEventListener("change", async event => {
-  const nameInput = event.target.closest("[data-participant-name]");
-  if (nameInput) { await repository.updateParticipant(nameInput.dataset.participantName, nameInput.value); notify("Nom actualitzat."); }
-  const betSelect = event.target.closest("[data-bet-cell]");
-  if (betSelect) {
-    try { await repository.updateBet(betSelect.dataset.betCell, { cellKey: betSelect.value }); notify("Aposta corregida."); }
-    catch (error) { notify(error.message, "error"); await renderAdmin(); }
-  }
 });
 
 app.addEventListener("input", event => {
@@ -447,15 +522,27 @@ app.addEventListener("submit", async event => {
       await renderAdmin();
     }
     if (form.dataset.form === "tracking") { lastTrackingToken = new FormData(form).get("token").trim(); await renderTracking(); }
+    if (form.dataset.form === "reservation") {
+      const data = new FormData(form);
+      const bets = [...form.querySelectorAll("[data-reservation-bet]")].map(select => ({ id: select.dataset.reservationBet, cellKey: select.value }));
+      await repository.updateReservation(form.dataset.participantId, { name: data.get("participantName"), bets });
+      notify("Canvis desats.");
+      await renderAdmin();
+    }
     if (form.dataset.form === "match") {
       const data = new FormData(form);
       const nullable = key => data.get(key) === "" ? null : Number(data.get(key));
-      await repository.updateMatch(currentPoolId, {
+      const state = await repository.getPoolState(currentPoolId);
+      const validation = validateMatchUpdate({ match: {
         phase: data.get("phase"), minute: Number(data.get("minute")), currentHome: Number(data.get("currentHome")), currentAway: Number(data.get("currentAway")),
         halfHome: nullable("halfHome"), halfAway: nullable("halfAway"), finalHome: nullable("finalHome"), finalAway: nullable("finalAway"),
         specialStatuses: Object.fromEntries(SPECIAL_CELLS.map(key => [key, data.get(`special-${key}`)]))
-      });
-      notify("Estat del partit actualitzat."); await renderAdmin();
+      }, pendingPlaces: state.metrics.pendingPlaces });
+      if (!validation.valid) throw new Error(validation.errors.join(" "));
+      await repository.updateMatch(currentPoolId, validation.match);
+      adminMatchNotice = validation.warnings.join(" ");
+      notify("Canvis desats");
+      await renderAdmin();
     }
   } catch (error) { notify(error.message || "No s'han pogut desar els canvis.", "error"); }
 });

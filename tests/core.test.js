@@ -1,11 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  buildHistorySummary,
   calculatePrizes,
   createPool,
+  finalReceivesRedistribution,
   formatDateTime,
+  groupPrizeAwards,
+  groupReservations,
   poolMetrics,
-  validateSelection
+  validateMatchUpdate,
+  validateSelection,
+  winningBetsText
 } from "../src/core.js";
 import { DemoRepository } from "../src/repository.js";
 
@@ -42,6 +48,93 @@ test("formata dates en català sense reinterpretar una hora local", () => {
   const localDate = new Date(2026, 8, 1, 21, 0);
   assert.equal(formatDateTime(localDate), "01/09/2026 · 21:00");
   assert.equal(formatDateTime(""), "Per definir");
+});
+
+test("agrupa reserves per identificador i manté separats els noms repetits", () => {
+  const participants = [{ id: "p1", name: "Alex" }, { id: "p2", name: "Alex" }];
+  const bets = [bet("a", "p1", "0-0"), bet("b", "p1", "1-0"), bet("c", "p2", "2-0")];
+  const reservations = groupReservations({ pool, participants, bets });
+  assert.equal(reservations.length, 2);
+  assert.deepEqual(reservations.map(item => item.participantId), ["p1", "p2"]);
+  assert.equal(reservations[0].totalCents, 800);
+  assert.equal(reservations[1].totalCents, 400);
+});
+
+test("aplica el pagament a totes les apostes de la reserva", async () => {
+  const memory = { value: null, getItem() { return this.value; }, setItem(_key, value) { this.value = value; } };
+  const repo = new DemoRepository(memory);
+  await repo.savePool(pool);
+  const reservation = await repo.createReservation({ poolId: pool.id, name: "Dues apostes", cellKeys: ["0-0", "1-0"] });
+  await repo.updateReservationPayment(reservation.participant.id, "paid");
+  const state = await repo.getPoolState(pool.id);
+  assert.ok(state.bets.filter(item => item.participantId === reservation.participant.id).every(item => item.paymentStatus === "paid"));
+});
+
+test("desa correccions individuals dins de la mateixa reserva", async () => {
+  const memory = { value: null, getItem() { return this.value; }, setItem(_key, value) { this.value = value; } };
+  const repo = new DemoRepository(memory);
+  await repo.savePool(pool);
+  const reservation = await repo.createReservation({ poolId: pool.id, name: "Original", cellKeys: ["0-0", "1-0"] });
+  await repo.updateReservation(reservation.participant.id, {
+    name: "Corregit",
+    bets: [{ id: reservation.bets[0].id, cellKey: "2-0" }, { id: reservation.bets[1].id, cellKey: "1-0" }]
+  });
+  const state = await repo.getPoolState(pool.id);
+  assert.equal(state.participants[0].name, "Corregit");
+  assert.deepEqual(state.bets.map(item => item.cellKey), ["2-0", "1-0"]);
+});
+
+test("escriu correctament singulars i plurals de guanyadores", () => {
+  assert.equal(winningBetsText(1), "1 aposta guanyadora");
+  assert.equal(winningBetsText(2), "2 apostes guanyadores");
+});
+
+test("agrupa premis per participació sense fusionar persones amb el mateix nom", () => {
+  const participants = [{ id: "p1", name: "Alex" }, { id: "p2", name: "Alex" }];
+  const bets = [bet("a", "p1", "2-1"), bet("b", "p2", "2-1")];
+  const result = calculatePrizes({ pool, bets, match: match({ halfHome: 9, halfAway: 9 }) });
+  const summaries = groupPrizeAwards({ awards: result.awards, bets, participants });
+  assert.equal(summaries.length, 2);
+  assert.deepEqual(summaries.map(item => item.participantId), ["p1", "p2"]);
+  assert.equal(summaries.reduce((sum, item) => sum + item.totalCents, 0), result.totalPotCents);
+});
+
+test("indica redistribució només quan la franja final rep diners addicionals", () => {
+  const receives = calculatePrizes({ pool, bets: [bet("final", "p1", "2-1")], match: match({ halfHome: 9, halfAway: 9 }) });
+  const balanced = calculatePrizes({ pool, bets: [bet("half", "p1", "1-0"), bet("final", "p2", "2-1"), bet("special", "p3", "3-3")], match: match({ specialStatuses: { "3-3": "completed" } }) });
+  assert.equal(finalReceivesRedistribution(receives), true);
+  assert.equal(finalReceivesRedistribution(balanced), false);
+});
+
+test("valida la fase final i sincronitza el marcador actual", () => {
+  const invalidMinute = validateMatchUpdate({ match: { ...match({}), phase: "final", minute: -1 } });
+  assert.equal(invalidMinute.valid, false);
+  assert.match(invalidMinute.errors.join(" "), /minut/);
+  const incomplete = validateMatchUpdate({ match: { ...match({ halfHome: null, finalHome: null, specialStatuses: { "3-3": "pending" } }), phase: "final", minute: 90 } });
+  assert.equal(incomplete.valid, false);
+  assert.match(incomplete.errors.join(" "), /descans/);
+  assert.match(incomplete.errors.join(" "), /resultat final/);
+  assert.match(incomplete.errors.join(" "), /especials/);
+  const complete = validateMatchUpdate({
+    match: { ...match({ specialStatuses: { "3-3": "failed", "3-4": "failed", "4-3": "failed", "4-4": "failed" } }), phase: "final", minute: 90, currentHome: 0, currentAway: 0 },
+    pendingPlaces: 1
+  });
+  assert.equal(complete.valid, true);
+  assert.equal(complete.syncedScore, true);
+  assert.deepEqual([complete.match.currentHome, complete.match.currentAway], [2, 1]);
+  assert.match(complete.warnings.join(" "), /pagament pendent/);
+});
+
+test("el resum històric és de només lectura i conserva totals", () => {
+  const bets = [bet("winner", "p1", "2-1")];
+  const prizeResult = calculatePrizes({ pool, bets, match: match({ halfHome: 9, halfAway: 9 }) });
+  const finishedPool = { ...pool, status: "finished" };
+  const summary = buildHistorySummary({ pool: finishedPool, bets, participants: [{ id: "p1", name: "Guanyador" }], prizeResult, metrics: poolMetrics(finishedPool, bets) });
+  assert.equal(summary.readOnly, true);
+  assert.equal(summary.paidCount, 1);
+  assert.equal(summary.finalPotCents, prizeResult.totalPotCents);
+  assert.equal(summary.distributedCents + summary.carryoverCents, summary.finalPotCents);
+  assert.equal(summary.winners.length, 1);
 });
 
 test("cada casella admet dues apostes i rebutja la tercera", () => {
