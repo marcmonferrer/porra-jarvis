@@ -1,6 +1,7 @@
 import {
   SPECIAL_CELLS,
   calculatePrizes,
+  formatDateTime,
   formatMoney,
   isSpecialCell,
   listCells,
@@ -59,11 +60,6 @@ function matchName(pool) {
   return `${pool.homeTeam || "Equip local"} vs ${pool.awayTeam || "Equip visitant"}`;
 }
 
-function dateText(value) {
-  if (!value) return "Per definir";
-  return new Intl.DateTimeFormat("ca-ES", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
-}
-
 function ensureRealtime(poolId) {
   if (repository.mode !== "supabase" || subscribedPoolId === poolId) return;
   unsubscribeRealtime?.();
@@ -84,10 +80,10 @@ function renderTeam(team, image, side) {
 
 function hero(pool) {
   return `<section class="match-hero">
-    <div class="match-hero__top"><span class="status-pill status-${pool.status}">${statusLabel(pool.status)}</span><span>${dateText(pool.matchAt)}</span></div>
+    <div class="match-hero__top"><span class="status-pill status-${pool.status}">${statusLabel(pool.status)}</span><span>${formatDateTime(pool.matchAt)}</span></div>
     <h1>${escapeHtml(pool.title)}</h1>
     <div class="versus">${renderTeam(pool.homeTeam, pool.homeImage, "home")}<span>VS</span>${renderTeam(pool.awayTeam, pool.awayImage, "away")}</div>
-    <p class="close-note">Participacions fins a ${dateText(pool.closesAt)} · ${formatMoney(pool.priceCents)} per aposta</p>
+    <p class="close-note">Participacions fins a ${formatDateTime(pool.closesAt)} · ${formatMoney(pool.priceCents)} per aposta</p>
   </section>`;
 }
 
@@ -218,8 +214,8 @@ function poolForm(pool = {}) {
       <label>Equip visitant<input required name="awayTeam" value="${escapeHtml(pool.awayTeam || "")}" placeholder="Segon marcador"></label>
       <label>Imatge local (URL)<input name="homeImage" type="url" value="${escapeHtml(pool.homeImage || "")}" placeholder="https://…"></label>
       <label>Imatge visitant (URL)<input name="awayImage" type="url" value="${escapeHtml(pool.awayImage || "")}" placeholder="https://…"></label>
-      <label>Data i hora del partit<input required name="matchAt" type="datetime-local" value="${localDate(pool.matchAt)}"></label>
-      <label>Tancament de participacions<input required name="closesAt" type="datetime-local" value="${localDate(pool.closesAt)}"></label>
+      <label>Data i hora del partit<input required name="matchAt" type="datetime-local" value="${localDate(pool.matchAt)}"><small class="date-preview" data-date-preview="matchAt">Previsualització: ${formatDateTime(pool.matchAt)}</small></label>
+      <label>Tancament de participacions<input required name="closesAt" type="datetime-local" value="${localDate(pool.closesAt)}"><small class="date-preview" data-date-preview="closesAt">Previsualització: ${formatDateTime(pool.closesAt)}</small></label>
       <label>Preu per aposta (€)<input required name="price" type="number" step="0.01" min="0" value="${(pool.priceCents ?? 400) / 100}"></label>
       <label>Import al pot (€)<input required name="poolPerBet" type="number" step="0.01" min="0" value="${(pool.poolPerBetCents ?? 350) / 100}"></label>
       <label>Gestió (€)<input required name="fee" type="number" step="0.01" min="0" value="${(pool.feeCents ?? 50) / 100}"></label>
@@ -301,7 +297,7 @@ function adminPrizesMarkup(state) {
 }
 
 function historyMarkup(pools) {
-  return `<div class="section-heading"><div><span>Totes les edicions</span><h2>Historial de porres</h2></div><strong>${pools.length}</strong></div>${pools.length ? `<div class="history-list">${pools.map(pool => `<button data-pool="${pool.id}"><span class="status-pill status-${pool.status}">${statusLabel(pool.status)}</span><strong>${escapeHtml(pool.title)}</strong><small>${escapeHtml(matchName(pool))} · ${dateText(pool.matchAt)}</small></button>`).join("")}</div>` : `<div class="empty-inline">Encara no hi ha historial.</div>`}`;
+  return `<div class="section-heading"><div><span>Totes les edicions</span><h2>Historial de porres</h2></div><strong>${pools.length}</strong></div>${pools.length ? `<div class="history-list">${pools.map(pool => `<button data-pool="${pool.id}"><span class="status-pill status-${pool.status}">${statusLabel(pool.status)}</span><strong>${escapeHtml(pool.title)}</strong><small>${escapeHtml(matchName(pool))} · ${formatDateTime(pool.matchAt)}</small></button>`).join("")}</div>` : `<div class="empty-inline">Encara no hi ha historial.</div>`}`;
 }
 
 async function renderTracking() {
@@ -381,7 +377,7 @@ app.addEventListener("click", async event => {
   if (event.target.closest("[data-action='confirm-reservation']")) return confirmReservation();
   if (event.target.closest("[data-action='share-pool']")) {
     const pool = await repository.getPoolState(currentPoolId);
-    const message = `${pool.pool.title}\n${matchName(pool.pool)}\nParticipa a Porra Live: ${location.origin}${location.pathname}?pool=${pool.pool.slug}`;
+    const message = `${pool.pool.title}\n${matchName(pool.pool)}\nPartit: ${formatDateTime(pool.pool.matchAt)}\nTancament: ${formatDateTime(pool.pool.closesAt)}\nParticipa a Porra Live: ${location.origin}${location.pathname}?pool=${pool.pool.slug}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
   }
   const copy = event.target.closest("[data-copy]");
@@ -428,6 +424,13 @@ app.addEventListener("change", async event => {
     try { await repository.updateBet(betSelect.dataset.betCell, { cellKey: betSelect.value }); notify("Aposta corregida."); }
     catch (error) { notify(error.message, "error"); await renderAdmin(); }
   }
+});
+
+app.addEventListener("input", event => {
+  const dateInput = event.target.closest("input[type='datetime-local']");
+  if (!dateInput) return;
+  const preview = app.querySelector(`[data-date-preview='${dateInput.name}']`);
+  if (preview) preview.textContent = `Previsualització: ${formatDateTime(dateInput.value)}`;
 });
 
 app.addEventListener("submit", async event => {

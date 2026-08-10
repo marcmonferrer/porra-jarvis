@@ -32,6 +32,21 @@ export function formatMoney(cents, locale = "ca-ES") {
   });
 }
 
+export function formatDateTime(value) {
+  if (!value) return "Per definir";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "Per definir";
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("ca-ES", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23"
+  }).formatToParts(date).map(({ type, value: part }) => [type, part]));
+  return `${parts.day}/${parts.month}/${parts.year} · ${parts.hour}:${parts.minute}`;
+}
+
 export function resultCell(home, away) {
   return `${Number(home)}-${Number(away)}`;
 }

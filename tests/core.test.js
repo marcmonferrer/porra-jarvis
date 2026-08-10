@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   calculatePrizes,
   createPool,
+  formatDateTime,
   poolMetrics,
   validateSelection
 } from "../src/core.js";
@@ -35,6 +36,12 @@ const match = overrides => ({
   finalAway: 1,
   specialStatuses: { "3-3": "failed", "3-4": "failed", "4-3": "failed", "4-4": "failed" },
   ...overrides
+});
+
+test("formata dates en català sense reinterpretar una hora local", () => {
+  const localDate = new Date(2026, 8, 1, 21, 0);
+  assert.equal(formatDateTime(localDate), "01/09/2026 · 21:00");
+  assert.equal(formatDateTime(""), "Per definir");
 });
 
 test("cada casella admet dues apostes i rebutja la tercera", () => {
