@@ -63,19 +63,29 @@ test("identifica inequívocament la casella del resultat del descans", () => {
   assert.deepEqual(halfTimeCellState(halfMatch(), "2-1"), { isResult: false, accessibleLabel: "" });
 });
 
-test("mostra un únic guanyador pagat amb la franja exacta del descans", () => {
+test("mostra el nom real d'un únic guanyador pagat amb la franja exacta del descans", () => {
   const bets = [bet("winner", "p1", "3-1")];
-  const outcome = halfTimeOutcome({ pool, bets, participants: [participant("p1", "Participant A")], match: halfMatch() });
+  const outcome = halfTimeOutcome({ pool, bets, participants: [participant("p1", "Laia Ferrer")], match: halfMatch() });
   const engine = calculatePrizes({ pool, bets, match: halfMatch() });
   assert.equal(outcome.winners.length, 1);
-  assert.equal(outcome.winners[0].name, "Participant A");
+  assert.equal(outcome.winners[0].name, "Laia Ferrer");
   assert.equal(outcome.winners[0].cents, engine.allocations.halfBase);
+});
+
+test("utilitza el nom real inclòs a l'estat públic sense exposar un identificador de participació", () => {
+  const publicBet = { id: "public-winner", poolId: pool.id, cellKey: "3-1", paymentStatus: "paid", participantName: "Núria Soler" };
+  const outcome = halfTimeOutcome({ pool, bets: [publicBet], match: halfMatch() });
+  assert.equal(outcome.winners.length, 1);
+  assert.equal(outcome.winners[0].name, "Núria Soler");
+  assert.equal(outcome.winners[0].participantId, undefined);
 });
 
 test("reparteix la franja del descans entre diverses apostes pagades", () => {
   const bets = [bet("a", "p1", "3-1"), bet("b", "p2", "3-1")];
-  const outcome = halfTimeOutcome({ pool, bets, participants: [participant("p1", "A"), participant("p2", "B")], match: halfMatch() });
+  const outcome = halfTimeOutcome({ pool, bets, participants: [participant("p1", "Alex Puig"), participant("p2", "Alex Puig")], match: halfMatch() });
   assert.equal(outcome.winners.length, 2);
+  assert.deepEqual(outcome.winners.map(winner => winner.name), ["Alex Puig", "Alex Puig"]);
+  assert.notEqual(outcome.winners[0].participantId, outcome.winners[1].participantId);
   assert.equal(outcome.winners.reduce((sum, winner) => sum + winner.cents, 0), outcome.potCents);
 });
 
@@ -103,4 +113,16 @@ test("La meva aposta queda en només lectura i identifica el premi del descans",
   assert.equal(state.readOnly, true);
   assert.equal(state.won, true);
   assert.equal(state.label, "Guanyadora del descans");
+});
+
+test("La meva aposta conserva el nom real de la participació guanyadora", async () => {
+  const memory = { value: null, getItem() { return this.value; }, setItem(_key, value) { this.value = value; } };
+  const repository = new DemoRepository(memory);
+  await repository.savePool(pool);
+  const reservation = await repository.createReservation({ poolId: pool.id, name: "Júlia Casals", cellKeys: ["3-1"] });
+  await repository.updateReservationPayment(reservation.participant.id, "paid");
+  await repository.updateMatch(pool.id, halfMatch());
+  const tracking = await repository.getTracking(reservation.token);
+  assert.equal(tracking.participant.name, "Júlia Casals");
+  assert.ok(tracking.bets[0].halfPrizeCents > 0);
 });

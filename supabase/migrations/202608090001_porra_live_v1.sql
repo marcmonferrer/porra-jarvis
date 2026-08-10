@@ -314,8 +314,21 @@ begin
       ) order by s.sort_order), '[]'::jsonb) from public.special_bets s where s.pool_id = target_pool.id)
     ),
     'bets', (select coalesce(jsonb_agg(jsonb_build_object(
-      'id', b.id, 'cellKey', b.cell_key, 'paymentStatus', b.payment_status
-    )), '[]'::jsonb) from public.bets b where b.pool_id = target_pool.id and b.payment_status in ('pending', 'paid')),
+      'id', b.id, 'cellKey', b.cell_key, 'paymentStatus', b.payment_status,
+      'participantName', case
+        when b.payment_status = 'paid' and exists (
+          select 1 from public.match_states m
+          where m.pool_id = b.pool_id
+            and m.phase in ('half', 'second', 'final')
+            and m.half_home is not null and m.half_away is not null
+            and b.cell_key = m.half_home::text || '-' || m.half_away::text
+        ) then p.display_name
+        else null
+      end
+    )), '[]'::jsonb)
+      from public.bets b
+      join public.participants p on p.id = b.participant_id
+      where b.pool_id = target_pool.id and b.payment_status in ('pending', 'paid')),
     'match', (select jsonb_build_object(
       'phase', m.phase, 'minute', m.minute, 'currentHome', m.current_home, 'currentAway', m.current_away,
       'halfHome', m.half_home, 'halfAway', m.half_away, 'finalHome', m.final_home, 'finalAway', m.final_away,

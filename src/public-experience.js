@@ -34,7 +34,7 @@ export function halfTimeOutcome({ pool, bets, participants = [], match }) {
     const cents = result.awards.find(award => award.betId === betId)?.breakdown
       ?.filter(item => item.category === "half")
       .reduce((sum, item) => sum + item.cents, 0) || 0;
-    return { betId, participantId: bet?.participantId, name: participant?.name || "Participant", cents };
+    return { betId, participantId: bet?.participantId, name: participant?.name ?? bet?.participantName, cents };
   });
   return {
     cellKey,
