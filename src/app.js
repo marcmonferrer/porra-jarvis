@@ -16,7 +16,18 @@ import {
   winningBetsText
 } from "./core.js";
 import { demoResetButtonMarkup, isDemoResetAvailable, preventAccidentalSubmit, resetDemoSafely, validatePoolBeforePublish } from "./demo-reset.js";
-import { halfTimeCellState, halfTimeOutcome, halfTimeResultCell, participationState, trackingHalfTimeState } from "./public-experience.js";
+import {
+  finalResultCell,
+  finalResultCellState,
+  finalSummaryState,
+  halfTimeCellState,
+  halfTimeOutcome,
+  halfTimeResultCell,
+  participationState,
+  publicPhasePresentation,
+  trackingFinalState,
+  trackingHalfTimeState
+} from "./public-experience.js";
 import { createRepository } from "./repository.js";
 
 const app = document.querySelector("#app");
@@ -125,11 +136,13 @@ function gridMarkup(state, interactive = true) {
       const selected = selectedCells.includes(key);
       const special = isSpecialCell(key);
       const halfTimeCell = halfTimeCellState(match, key);
-      return `<button class="bet-cell ${special ? "is-special" : ""} ${selected ? "is-selected" : ""} ${available === 0 ? "is-full" : ""} ${halfTimeCell.isResult ? "is-half-result" : ""}"
+      const finalCell = finalResultCellState(match, key);
+      return `<button class="bet-cell ${special ? "is-special" : ""} ${selected ? "is-selected" : ""} ${available === 0 ? "is-full" : ""} ${halfTimeCell.isResult ? "is-half-result" : ""} ${finalCell.isResult ? "is-final-result" : ""}"
         type="button" data-cell="${key}" ${!interactive || available === 0 ? "disabled" : ""}
-        aria-pressed="${selected}" aria-label="${escapeHtml(cellLabel(pool, key))}, ${available} places lliures${halfTimeCell.isResult ? ", resultat del descans" : ""}">
+        aria-pressed="${selected}" aria-label="${escapeHtml(cellLabel(pool, key))}, ${available} places lliures${halfTimeCell.isResult ? ", resultat del descans" : ""}${finalCell.isResult ? ", resultat final" : ""}">
         <strong>${escapeHtml(cellLabel(pool, key))}</strong>
         ${halfTimeCell.isResult ? `<span class="result-badge" aria-label="Resultat del descans">✓ Descans</span>` : ""}
+        ${finalCell.isResult ? `<span class="result-badge final-badge" aria-label="Resultat final">✓ Final</span>` : ""}
         ${special ? `<small>${escapeHtml(pool.specials.find(item => item.cellKey === key)?.description || "Aposta especial")}</small>` : ""}
         <span class="occupancy-dots" aria-hidden="true"><i class="${occupancy > 0 ? "filled" : ""}"></i><i class="${occupancy > 1 ? "filled" : ""}"></i></span>
         <em>${available === 0 ? "Completa" : `${available} ${available === 1 ? "plaça" : "places"}`}</em>
@@ -139,7 +152,7 @@ function gridMarkup(state, interactive = true) {
   }).join("");
   return `<div class="score-key"><span>${escapeHtml(pool.homeTeam)} = primer marcador →</span><span>${escapeHtml(pool.awayTeam)} = segon marcador ↓</span></div>
     <div class="score-grid"><span class="grid-corner">LOCAL<br>VISITANT</span>${headers}${rows}</div>
-    <div class="grid-legend"><span><i></i>Dues places</span><span><i class="one"></i>Una ocupada</span><span><i class="two"></i>Completa</span><span><i class="selected"></i>Selecció temporal</span>${halfTimeResultCell(match) ? `<span><i class="half-result">✓</i>Resultat del descans</span>` : ""}</div>`;
+    <div class="grid-legend"><span><i></i>Dues places</span><span><i class="one"></i>Una ocupada</span><span><i class="two"></i>Completa</span><span><i class="selected"></i>Selecció temporal</span>${halfTimeResultCell(match) ? `<span><i class="half-result">✓</i>Resultat del descans</span>` : ""}${finalResultCell(match) ? `<span><i class="final-result">✓</i>Resultat final</span>` : ""}</div>`;
 }
 
 function halfTimeMarkup(state) {
@@ -154,6 +167,48 @@ function halfTimeMarkup(state) {
     <div class="half-time-result"><span>DESCANS</span><h2 id="half-time-title">${escapeHtml(state.pool.homeTeam)} <strong>${state.match.halfHome}–${state.match.halfAway}</strong> ${escapeHtml(state.pool.awayTeam)}</h2></div>
     ${winnerMarkup}<p class="half-time-rule">${escapeHtml(outcome.ruleText)}</p>
   </section>`;
+}
+
+function publicWinnerList(title, winners, emptyText) {
+  if (!winners.length) return `<div class="public-winner-list"><h3>${escapeHtml(emptyText)}</h3></div>`;
+  return `<div class="public-winner-list"><h3>${escapeHtml(title)}</h3>${winners.map(winner => `<p><strong>${escapeHtml(winner.name)}</strong><span>— ${formatMoney(winner.cents)}</span></p>`).join("")}</div>`;
+}
+
+function finalSummaryMarkup(state) {
+  const summary = finalSummaryState(state);
+  if (!summary) return "";
+  const score = state.match.finalHome == null ? "—" : `${state.match.finalHome}–${state.match.finalAway}`;
+  if (!summary.complete) return `<section class="final-summary panel" aria-labelledby="final-title">
+    <div class="final-result"><span>FINAL</span><h2 id="final-title">${escapeHtml(state.pool.homeTeam)} <strong>${score}</strong> ${escapeHtml(state.pool.awayTeam)}</h2></div>
+    <div class="warning final-pending"><strong>Resum pendent de completar</strong><p>Falta indicar: ${escapeHtml(summary.missing.join(", "))}. Completa-ho des d’Administració abans de mostrar imports definitius.</p></div>
+  </section>`;
+  const finalTitle = summary.final.winners.length === 1 ? "Guanyador del resultat final" : "Guanyadors del resultat final";
+  const halfTitle = summary.half.winners.length === 1 ? "Guanyador del descans" : "Guanyadors del descans";
+  const specialMarkup = summary.specials.map(special => {
+    const status = special.status === "completed" ? "Completada" : "No completada";
+    const winners = special.status === "completed"
+      ? publicWinnerList(special.winners.length === 1 ? "Guanyador" : "Guanyadors", special.winners, "Cap aposta pagada guanyadora")
+      : `<p class="special-no-winner">Sense guanyadors: la condició no s’ha completat.</p>`;
+    return `<article><div><strong>${escapeHtml(special.title)}</strong><span class="special-state ${special.status}">${status}</span></div>${winners}</article>`;
+  }).join("");
+  const labels = { half: "Descans", final: "Resultat final", special: "Especials", "final-redistribution": "Redistribució" };
+  const totals = summary.participants.length
+    ? summary.participants.map(participant => `<article><div><strong>${escapeHtml(participant.name)}</strong><b>${formatMoney(participant.totalCents)}</b></div><p>${Object.entries(participant.breakdown).map(([category, cents]) => `${labels[category] || category}: ${formatMoney(cents)}`).join(" · ")}</p></article>`).join("")
+    : `<div class="empty-inline">No hi ha cap participació guanyadora. El pot queda acumulat segons les regles actuals.</div>`;
+  return `<section class="final-summary panel" aria-labelledby="final-title">
+    <div class="final-result"><span>FINAL</span><h2 id="final-title">${escapeHtml(state.pool.homeTeam)} <strong>${score}</strong> ${escapeHtml(state.pool.awayTeam)}</h2></div>
+    <div class="final-main-winner">${publicWinnerList(finalTitle, summary.final.winners, "No hi ha cap aposta guanyadora del resultat final")}<p class="final-rule">${escapeHtml(summary.final.ruleText)}</p></div>
+    <div class="resolved-category"><h3>Resultat del descans · ${state.match.halfHome}–${state.match.halfAway}</h3>${publicWinnerList(halfTitle, summary.half.winners, "No hi ha cap aposta guanyadora al descans")}</div>
+    <div class="resolved-category"><h3>Apostes especials</h3><div class="public-specials">${specialMarkup}</div></div>
+    <section class="public-participant-totals"><div class="section-heading"><div><span>Premis definitius</span><h3>Total per participació</h3></div><strong>${formatMoney(summary.result.totalPotCents - summary.result.carryoverCents)}</strong></div>${totals}</section>
+  </section>`;
+}
+
+function closedParticipationMarkup(state, participation) {
+  const finalScore = state.match?.phase === "final" && state.match.finalHome != null
+    ? `<div class="checkout-final-score" aria-label="Resultat final"><span>FINAL</span><strong>${escapeHtml(state.pool.homeTeam)} ${state.match.finalHome}–${state.match.finalAway} ${escapeHtml(state.pool.awayTeam)}</strong></div>`
+    : "";
+  return `${finalScore}<div class="notice closed-bets-notice"><strong>Participacions tancades</strong><p>${escapeHtml(participation.message)}</p></div><button class="button primary wide" type="button" data-view="tracking">La meva aposta</button>`;
 }
 
 async function resolveActivePool() {
@@ -179,21 +234,22 @@ async function renderPublic() {
   if (!canPlay) selectedCells = [];
   const selectionCost = selectedCells.length * pool.priceCents;
   const selectionPool = selectedCells.length * pool.poolPerBetCents;
-  app.innerHTML = `${hero(pool, state.match)}${halfTimeMarkup(state)}${metricsMarkup(state.metrics)}
+  const phasePresentation = publicPhasePresentation(state.match);
+  app.innerHTML = `${hero(pool, state.match)}${halfTimeMarkup(state)}${finalSummaryMarkup(state)}${metricsMarkup(state.metrics)}
     <div class="public-layout">
       <section class="panel bet-panel">
         <div class="section-heading"><div><span>${canPlay ? "1 · Tria una o dues apostes" : "Seguiment del partit"}</span><h2>Graella de resultats i especials</h2></div><strong>${state.metrics.freePlaces} places lliures</strong></div>
         ${gridMarkup(state, canPlay)}
       </section>
       <aside class="panel checkout-panel">
-        <span class="eyebrow">${canPlay ? "2 · Confirma la participació" : "Seguiment en directe"}</span>
-        <h2>${canPlay ? "La teva selecció" : "Partit en curs"}</h2>
+        <span class="eyebrow">${canPlay ? "2 · Confirma la participació" : phasePresentation.eyebrow}</span>
+        <h2>${canPlay ? "La teva selecció" : phasePresentation.heading}</h2>
         ${canPlay ? `<label>Nom del participant<input name="participantName" maxlength="50" autocomplete="name" placeholder="El teu nom"></label>
           <div class="selection-summary">${selectedCells.length ? selectedCells.map(key => `<span>${escapeHtml(cellLabel(pool, key))}</span>`).join("") : `<p>Selecciona una o dues caselles diferents.</p>`}</div>
           <dl><div><dt>Cost total</dt><dd>${formatMoney(selectionCost)}</dd></div><div><dt>Destinat al pot</dt><dd>${formatMoney(selectionPool)}</dd></div></dl>
           <button class="button primary wide" data-action="confirm-reservation" ${selectedCells.length ? "" : "disabled"}>Confirmar apostes</button>
           <small>La selecció rosa encara no ocupa plaça. En confirmar, la reserva queda pendent de verificar.</small>`
-          : `<div class="notice closed-bets-notice"><strong>Participacions tancades</strong><p>${escapeHtml(participation.message)}</p></div><button class="button primary wide" type="button" data-view="tracking">La meva aposta</button>`}
+          : closedParticipationMarkup(state, participation)}
         <button class="button secondary wide" type="button" data-action="share-pool">Compartir per WhatsApp</button>
       </aside>
     </div>
@@ -204,8 +260,9 @@ function liveMarkup(state) {
   const { pool, match } = state;
   if (!match) return "";
   const phases = { pre: "Prepartit", first: "Primera part", half: "Descans", second: "Segona part", final: "Final" };
+  const presentation = publicPhasePresentation(match);
   return `<section class="panel live-panel">
-    <div><span class="live-dot ${["first", "second"].includes(match.phase) ? "active" : ""}"></span><strong>${phases[match.phase] || match.phase}</strong><small>${match.minute ? `Minut ${match.minute}` : ""}</small></div>
+    <div><span class="live-dot ${["first", "second"].includes(match.phase) ? "active" : ""}"></span><strong>${phases[match.phase] || match.phase}</strong><small>${presentation.showMinute && match.minute ? `Minut ${match.minute}` : ""}</small></div>
     <div class="live-score"><span>${escapeHtml(pool.homeTeam)}</span><strong>${match.currentHome} – ${match.currentAway}</strong><span>${escapeHtml(pool.awayTeam)}</span></div>
     <div class="live-results"><span>Descans: ${match.halfHome == null ? "—" : `${match.halfHome}–${match.halfAway}`}</span><span>Final: ${match.finalHome == null ? "—" : `${match.finalHome}–${match.finalAway}`}</span></div>
   </section>`;
@@ -435,7 +492,7 @@ async function renderTracking() {
   const chance = bet => {
     if (bet.paymentStatus === "released") return "Reserva alliberada";
     if (bet.paymentStatus === "pending") return "Sense opcions fins que es confirmi el pagament";
-    if (tracking.final) return bet.prizeCents > 0 ? "Aposta guanyadora" : "Sense premi";
+    if (tracking.final || tracking.match.phase === "final") return bet.prizeCents > 0 ? "Aposta guanyadora" : "Sense premi";
     if (isSpecialCell(bet.cellKey)) {
       const status = tracking.match.specialStatuses?.[bet.cellKey] || "pending";
       return status === "completed" ? "Guanyadora provisional" : status === "failed" ? "Ja no té opcions" : "Encara té opcions";
@@ -446,7 +503,7 @@ async function renderTracking() {
   };
   app.innerHTML = `${hero(tracking.pool, tracking.match)}<section class="tracking-card panel"><div class="section-heading"><div><span>Seguiment privat</span><h2>${escapeHtml(tracking.participant.name)}</h2></div><strong>${formatMoney(total)}</strong></div>
     ${participation.open ? "" : `<div class="notice tracking-readonly"><strong>Mode només lectura</strong><p>${escapeHtml(participation.message)}</p></div>`}
-    <div class="tracking-bets">${tracking.bets.map(bet => { const halfState = trackingHalfTimeState({ pool: tracking.pool, match: tracking.match, bet }); return `<article><div><strong>${escapeHtml(cellLabel(tracking.pool, bet.cellKey))}</strong><span class="payment-status ${bet.paymentStatus}">${paymentLabel(bet.paymentStatus)}</span></div><dl><div><dt>Estat</dt><dd>${bet.paymentStatus === "paid" ? "Participa en els premis" : bet.paymentStatus === "pending" ? "Pendent de verificar pagament" : "Reserva alliberada"}</dd></div><div><dt>Descans</dt><dd>${halfState.label}${halfState.won ? ` · ${formatMoney(bet.halfPrizeCents)}` : ""}</dd></div><div><dt>Opcions</dt><dd>${chance(bet)}</dd></div><div><dt>Premi ${tracking.final ? "definitiu" : "provisional"}</dt><dd>${formatMoney(bet.prizeCents || 0)}</dd></div></dl></article>`; }).join("")}</div>
+    <div class="tracking-bets">${tracking.bets.map(bet => { const halfState = trackingHalfTimeState({ pool: tracking.pool, match: tracking.match, bet }); const finalState = trackingFinalState({ pool: tracking.pool, match: tracking.match, bet }); return `<article><div><strong>${escapeHtml(cellLabel(tracking.pool, bet.cellKey))}</strong><span class="payment-status ${bet.paymentStatus}">${paymentLabel(bet.paymentStatus)}</span></div><dl><div><dt>Estat</dt><dd>${bet.paymentStatus === "paid" ? "Participa en els premis" : bet.paymentStatus === "pending" ? "Pendent de verificar pagament" : "Reserva alliberada"}</dd></div><div><dt>Descans</dt><dd>${halfState.label}${halfState.won ? ` · ${formatMoney(bet.halfPrizeCents)}` : ""}</dd></div>${tracking.match.phase === "final" ? `<div><dt>Resultat final</dt><dd>${finalState.finalLabel}${finalState.finalWon ? ` · ${formatMoney(bet.finalPrizeCents)}` : ""}</dd></div><div><dt>Especial</dt><dd>${finalState.specialLabel}${finalState.specialWon ? ` · ${formatMoney(bet.specialPrizeCents)}` : ""}</dd></div>${bet.redistributionPrizeCents ? `<div><dt>Redistribució</dt><dd>${formatMoney(bet.redistributionPrizeCents)}</dd></div>` : ""}` : ""}<div><dt>Opcions</dt><dd>${chance(bet)}</dd></div><div><dt>${tracking.match.phase === "final" ? "Premi total" : `Premi ${tracking.final ? "definitiu" : "provisional"}`}</dt><dd>${formatMoney(bet.prizeCents || 0)}</dd></div></dl></article>`; }).join("")}</div>
     ${liveMarkup({ pool: tracking.pool, match: tracking.match })}
     <p class="privacy-note">Aquest enllaç és privat. No el comparteixis públicament.</p></section>`;
 }

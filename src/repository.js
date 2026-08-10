@@ -7,9 +7,21 @@ import {
   validateMatchUpdate,
   validateSelection
 } from "./core.js";
-import { halfTimeOutcome, participationState } from "./public-experience.js";
+import { participationState } from "./public-experience.js";
 
 const STORAGE_KEY = "porra-live-demo-v1";
+
+function trackingPrizeFields(preview, betId) {
+  const award = (preview?.awards || []).find(item => item.betId === betId);
+  const centsFor = category => (award?.breakdown || []).filter(item => item.category === category).reduce((sum, item) => sum + item.cents, 0);
+  return {
+    prizeCents: award?.totalCents || 0,
+    halfPrizeCents: centsFor("half"),
+    finalPrizeCents: centsFor("final"),
+    specialPrizeCents: centsFor("special"),
+    redistributionPrizeCents: centsFor("final-redistribution")
+  };
+}
 
 function initialData() {
   return { pools: [], participants: [], bets: [], matches: {}, prizeResults: {} };
@@ -159,15 +171,12 @@ export class DemoRepository {
     const state = await this.getPoolState(participant.poolId);
     const bets = state.bets.filter(bet => bet.participantId === participant.id);
     const preview = state.prizeResult || calculatePrizes({ pool: state.pool, bets: state.bets, match: state.match });
-    const halfTime = halfTimeOutcome(state);
-    const awards = preview.awards || [];
     return {
       pool: state.pool,
       participant,
       bets: bets.map(bet => ({
         ...bet,
-        prizeCents: awards.find(award => award.betId === bet.id)?.totalCents || 0,
-        halfPrizeCents: halfTime?.winners.find(winner => winner.betId === bet.id)?.cents || 0
+        ...trackingPrizeFields(preview, bet.id)
       })),
       match: state.match,
       final: state.pool.status === "finished"
@@ -417,14 +426,12 @@ export class SupabaseRepository {
     if (!data) return data;
     const state = await this.getPoolState(data.pool.id);
     const preview = state.prizeResult || calculatePrizes({ pool: state.pool, bets: state.bets, match: state.match });
-    const halfTime = halfTimeOutcome(state);
     return {
       ...data,
-      bets: data.bets.map(bet => ({
-        ...bet,
-        prizeCents: bet.prizeCents ?? (preview.awards.find(award => award.betId === bet.id)?.totalCents || 0),
-        halfPrizeCents: halfTime?.winners.find(winner => winner.betId === bet.id)?.cents || 0
-      }))
+      bets: data.bets.map(bet => {
+        const prizeFields = trackingPrizeFields(preview, bet.id);
+        return { ...bet, ...prizeFields, prizeCents: bet.prizeCents ?? prizeFields.prizeCents };
+      })
     };
   }
 

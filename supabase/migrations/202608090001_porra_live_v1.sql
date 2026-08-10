@@ -314,21 +314,29 @@ begin
       ) order by s.sort_order), '[]'::jsonb) from public.special_bets s where s.pool_id = target_pool.id)
     ),
     'bets', (select coalesce(jsonb_agg(jsonb_build_object(
-      'id', b.id, 'cellKey', b.cell_key, 'paymentStatus', b.payment_status,
-      'participantName', case
-        when b.payment_status = 'paid' and exists (
-          select 1 from public.match_states m
-          where m.pool_id = b.pool_id
-            and m.phase in ('half', 'second', 'final')
-            and m.half_home is not null and m.half_away is not null
-            and b.cell_key = m.half_home::text || '-' || m.half_away::text
-        ) then p.display_name
-        else null
-      end
-    )), '[]'::jsonb)
-      from public.bets b
-      join public.participants p on p.id = b.participant_id
-      where b.pool_id = target_pool.id and b.payment_status in ('pending', 'paid')),
+      'id', b.id, 'cellKey', b.cell_key, 'paymentStatus', b.payment_status
+    )), '[]'::jsonb) from public.bets b where b.pool_id = target_pool.id and b.payment_status in ('pending', 'paid')),
+    'winnerParticipations', (select coalesce(jsonb_agg(jsonb_build_object(
+      'name', winners.display_name, 'betIds', winners.bet_ids
+    ) order by winners.created_at), '[]'::jsonb) from (
+      select p.display_name, p.created_at, jsonb_agg(b.id order by b.created_at) as bet_ids
+      from public.participants p
+      join public.bets b on b.participant_id = p.id and b.payment_status = 'paid'
+      join public.match_states m on m.pool_id = p.pool_id
+      where p.pool_id = target_pool.id and m.phase in ('half', 'second', 'final') and (
+        (b.cell_key not in ('3-3', '3-4', '4-3', '4-4') and m.half_home is not null and m.half_away is not null
+          and b.cell_key = m.half_home::text || '-' || m.half_away::text)
+        or (m.phase = 'final' and b.cell_key not in ('3-3', '3-4', '4-3', '4-4')
+          and m.final_home is not null and m.final_away is not null
+          and b.cell_key = m.final_home::text || '-' || m.final_away::text)
+        or (m.phase = 'final' and exists (
+          select 1 from public.special_bets s
+          join public.special_results r on r.special_bet_id = s.id and r.status = 'completed'
+          where s.pool_id = p.pool_id and s.cell_key = b.cell_key
+        ))
+      )
+      group by p.id, p.display_name, p.created_at
+    ) winners),
     'match', (select jsonb_build_object(
       'phase', m.phase, 'minute', m.minute, 'currentHome', m.current_home, 'currentAway', m.current_away,
       'halfHome', m.half_home, 'halfAway', m.half_away, 'finalHome', m.final_home, 'finalAway', m.final_away,
