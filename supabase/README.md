@@ -1,23 +1,26 @@
 # Backend Supabase de Porra Live
 
-Les migracions versionades defineixen el backend compartit de Porra Live i ja estan desplegades a `porra-live-beta`, l’entorn de validació aïllat.
+Les migracions versionades defineixen el backend compartit de Porra Live. Les quatre estan desplegades una sola vegada a `porra-live-beta`, l’entorn de validació aïllat. La quarta repara additivament el defecte de resolució de `coalesce` detectat a la tercera, que es conserva immutable.
 
-## Estat de migracions desplegades
+## Estat de migracions
 
 | Migració local | Versió remota | Descripció |
 | --- | --- | --- |
 | `migrations/20260810143143_porra_live_v1.sql` | `20260810143143` | Model compartit, RPC transaccionals, RLS, permisos, triggers i Realtime segur. |
 | `migrations/20260810144836_add_supabase_foreign_key_indexes.sql` | `20260810144836` | Índexs de claus externes per a unions i accions referencials. |
+| `migrations/20260811102102_add_pool_invitations.sql` | `20260811102102` | Invitacions privades d’un sol ús, RPC administratives i reserva pública protegida per capacitat secreta. Conserva immutable el defecte històric `pg_catalog.coalesce`. |
+| `migrations/20260811104810_fix_pool_invitation_listing.sql` | `20260811104810` | Repara additivament `admin_list_pool_invitations(uuid)` amb `coalesce` SQL vàlid i reasserta els permisos mínims. |
 
-`porra-live-beta` no és encara un entorn públic: no té administrador, dades, credencials configurades al frontend ni desplegament compartit.
+L’historial remot està alineat amb els quatre fitxers locals. La reparació utilitza `CREATE OR REPLACE FUNCTION`, preserva el contracte i fa que la llista buida retorni correctament `[]` de tipus `jsonb`. El projecte no és encara un entorn públic: no té administrador persistent, dades de prova, credencials configurades al frontend ni desplegament compartit.
 
 ## Arquitectura demo i Supabase
 
 - `DemoRepository` conserva tota la funcionalitat local a `localStorage` amb la clau `porra-live-demo-v1`.
 - `SupabaseRepository` s’activa només amb `mode: "supabase"`, URL i publishable key.
 - El frontend continua sent estàtic. Carrega `@supabase/supabase-js@2.111.0` des d’un URL ESM fixat.
-- Les reserves i lectures públiques passen exclusivament per RPC.
+- Les reserves i lectures públiques passen exclusivament per RPC. El contracte del backend aplicat exigeix una invitació individual vàlida, però el frontend encara no està connectat a aquest flux.
 - L’administració utilitza Supabase Auth, RLS i RPC transaccionals per a les operacions compostes.
+- La CLI estable de Supabase està fixada com a dependència de desenvolupament local; totes les ordres del repositori s’executen amb `npx supabase`.
 
 ## Model d’autorització
 
@@ -30,8 +33,8 @@ No s’utilitzen `user_metadata`, `app_metadata` ni `auth.role()`. Les RPC admin
 | Rol | Accés directe | RPC |
 | --- | --- | --- |
 | `anon` | `SELECT` exclusivament sobre `pool_revisions`, protegit per RLS | `create_public_reservation`, `get_public_pool_state`, `get_tracking_state` |
-| `authenticated` sense perfil | Mateixa revisió pública; RLS denega les taules administratives | Les tres RPC públiques; les RPC administratives rebutgen la petició |
-| `authenticated` amb `admin_profiles` | CRUD de les taules operatives, limitat per RLS | RPC públiques i `admin_update_reservation`, `admin_update_match`, `admin_finalize_pool` |
+| `authenticated` sense perfil | Mateixa revisió pública; RLS denega les taules administratives | Les tres RPC públiques; totes les RPC administratives rebutgen la petició |
+| `authenticated` amb `admin_profiles` | CRUD de les taules operatives, limitat per RLS; cap accés directe a `private.pool_invitations` | RPC públiques, gestió d’invitacions i les RPC administratives existents |
 | servidor privilegiat | Només per a configuració operativa controlada | No arriba mai al navegador |
 
 RLS està activat a totes les taules de `public`. `GRANT` controla si el rol pot arribar a l’objecte i RLS controla les files que pot veure o modificar.
@@ -40,7 +43,7 @@ RLS està activat a totes les taules de `public`. `GRANT` controla si el rol pot
 
 Públiques:
 
-- `create_public_reservation`: reserva transaccional amb bloquejos per casella, límits de capacitat, tancament i fase.
+- `create_public_reservation(target_pool_id, participant_name, selected_cells, invitation_token)`: reserva transaccional amb invitació individual, bloquejos per casella, límits de capacitat, tancament i fase. La resposta conserva el token de tracking i les instruccions de pagament privades.
 - `get_public_pool_state`: estat sanejat sense UUID, tracking, correu, telèfon, instruccions de pagament ni reserves pendents identificables.
 - `get_tracking_state`: estat individual protegit pel token aleatori; a la base només se’n conserva el hash SHA-256.
 
@@ -49,6 +52,19 @@ Administratives i atòmiques:
 - `admin_update_reservation`: actualitza nom i totes les seleccions o reverteix completament.
 - `admin_update_match`: actualitza marcador i especials en una sola transacció.
 - `admin_finalize_pool`: valida fase, pendents, pot i premis; desa resultats i finalitza la porra en una sola transacció.
+- `admin_create_pool_invitation`: genera 32 bytes aleatoris, retorna el token hexadecimal una sola vegada i en desa només el hash SHA-256.
+- `admin_list_pool_invitations`: retorna identificador administratiu, dates i estat sanejat sense token, hash, UUID de porra ni `created_by`.
+- `admin_revoke_pool_invitation`: revoca atòmicament una invitació encara no consumida.
+
+## Invitacions invite-only
+
+`private.pool_invitations` viu en un esquema no exposat, té RLS activat i no concedeix cap privilegi de taula a `anon` ni `authenticated`. Només les RPC amb grants mínims poden accedir-hi.
+
+Els tokens d’invitació són 32 bytes aleatoris codificats com 64 caràcters hexadecimals lowercase. La base calcula SHA-256 sobre aquest text hexadecimal i només desa el resultat. Els tokens mal formats, inexistents, expirats, revocats, consumits o vinculats a una altra porra produeixen sempre `Invalid invitation`.
+
+La reserva reclama la invitació amb un `UPDATE` condicional abans de crear el participant. El consum, el participant i les apostes formen una única transacció: qualsevol error posterior reverteix també el consum. La revocació administrativa actualitza la mateixa fila amb condicions incompatibles, de manera que consum i revocació competeixen atòmicament.
+
+La signatura anterior de tres arguments s’elimina; no es conserva cap sobrecàrrega. L’estat públic, el tracking privat i la publicació Realtime no canvien. `paymentInstructions` només es retornen després d’una reserva amb invitació vàlida o amb un token secret de tracking vàlid.
 
 ## Realtime segur
 
@@ -74,6 +90,7 @@ Privades:
 
 - UUID de participants i apostes;
 - hash i token de tracking;
+- UUID, hash i estat intern de les invitacions;
 - estat individual pendent de pagament;
 - instruccions de pagament, excepte després de crear una reserva o dins del tracking privat;
 - perfils administratius i dades internes de premis.
@@ -94,17 +111,30 @@ No s’ha d’enviar mai al navegador cap secret, contrasenya, `service_role` o 
 
 API-Football queda completament desactivada per a la beta. No hi ha cap cron actiu i no s’ha de desplegar `functions/sync-live-score` ni configurar `API_FOOTBALL_KEY`, `SYNC_SECRET` o `SUPABASE_SERVICE_ROLE_KEY`.
 
-## Requisit antiabús pendent
+## Control antiabús invite-only
 
-La base garanteix integritat i concurrència, però encara no limita quantes reserves pot intentar crear una mateixa persona o IP. Una mesura antiabús —invitació, CAPTCHA o rate limit— és un requisit bloquejant abans del desplegament compartit de la beta.
+La migració aplicada implementa invitacions individuals d’un sol ús com a control antiabús. No confia en IP, fingerprint, metadades d’usuari ni secrets de servidor al frontend. Turnstile i el rate limit no formen part d’aquesta fase.
+
+La reparació additiva i la matriu remota completa estan validades. La reserva conserva `paymentInstructions`, el tracking les manté dins de `pool.paymentInstructions`, els errors d’invitació són uniformes i les respostes públiques no exposen secrets ni identificadors interns. La neteja posterior va confirmar zero comptes, sessions, perfils administratius, porres, participants, apostes i invitacions sintètiques residuals.
+
+## Validació remota completada
+
+La passada amb dades exclusivament sintètiques confirma:
+
+1. La llista buida retorna exactament `[]` i la llista poblada respecta `consumed`, `revoked`, `expired`, `active` sense secrets.
+2. Només l’administrador pot crear, llistar i revocar invitacions; l’usuari autenticat ordinari és rebutjat.
+3. Els tokens són hexadecimals lowercase de 64 caràcters, només se’n desa SHA-256 i no es poden reutilitzar.
+4. Format incorrecte, uppercase, token desconegut, expirat, revocat, consumit o d’una altra porra retornen `Invalid invitation`.
+5. Una reserva fallida per casella plena, tancament o fase no consumeix la invitació i el reintent posterior funciona.
+6. Dues peticions amb la mateixa invitació produeixen un sol participant; consum i revocació tenen un sol vencedor; dues peticions per l’última plaça produeixen un èxit i un `Cell is full`.
+7. `anon` continua limitat a les tres RPC públiques i `pool_revisions`; Realtime només publica aquesta taula.
+8. Els advisors mantenen la línia base coneguda: cap avís de rendiment, cap avís de seguretat nou i només els avisos intencionats de funcions privilegiades i RLS defensiu de la taula privada.
 
 ## Properes fases de `porra-live-beta`
 
-1. Disposar de Supabase CLI i Docker locals per validar les migracions en una base descartable.
-2. Amb aprovació explícita, crear comptes Auth de prova i validar rols, concurrència, RLS, Realtime i privacitat amb dades sintètiques.
-3. Amb una aprovació separada, crear l’únic administrador i afegir el seu UUID a `admin_profiles` des d’un entorn privilegiat.
-4. Configurar al frontend únicament la URL i la publishable key del projecte de validació.
-5. Implementar una mesura antiabús abans de qualsevol beta compartida.
-6. Repetir la validació completa abans d’un desplegament públic.
+1. Amb una aprovació separada, crear l’únic administrador permanent i afegir el seu UUID a `admin_profiles` des d’un entorn privilegiat.
+2. Configurar al frontend únicament la URL i la publishable key del projecte de validació.
+3. Adaptar el frontend perquè transporti el token d’invitació sense exposar-lo en logs o referers.
+4. Repetir la validació completa abans d’un desplegament públic.
 
 No s’ha de connectar el frontend, crear usuaris o dades, ni desplegar públicament sense una aprovació posterior expressa. `finalissima-porra` queda fora d’aquest flux.

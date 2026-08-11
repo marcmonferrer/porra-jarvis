@@ -7,5 +7,8 @@
     "start": "node scripts/serve.mjs",
     "test": "node --test",
     "check": "node --check src/core.js && node --check src/demo-reset.js && node --check src/public-experience.js && node --check src/repository.js && node --check src/app.js"
+  },
+  "devDependencies": {
+    "supabase": "2.113.0"
   }
 }

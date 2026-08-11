@@ -9,6 +9,7 @@ La versió actual inclou un mode demo local complet i deixa preparat el backend 
 ### Administració
 
 - Crear i editar múltiples porres.
+- Generar, consultar i revocar invitacions individuals d’un sol ús.
 - Configurar equips, imatges, horaris, preus, instruccions de pagament i quatre apostes especials.
 - Publicar, tancar i reobrir participacions.
 - Confirmar pagaments, alliberar reserves i corregir noms o apostes.
@@ -19,6 +20,7 @@ La versió actual inclou un mode demo local complet i deixa preparat el backend 
 ### Participants
 
 - Participació sense compte.
+- Accés mitjançant una invitació individual d’un sol ús en mode Supabase.
 - Una o dues apostes diferents per participant.
 - Dues places independents per casella.
 - Resum del cost i de l’import destinat al pot abans de confirmar.
@@ -44,7 +46,13 @@ Porra Live continua sent un frontend estàtic i responsive, sense procés de com
 
 ## Executar localment
 
-Requereix Node.js 20 o posterior. No cal instal·lar dependències.
+Requereix Node.js 20 o posterior. Instal·la les dependències fixades del projecte amb:
+
+```bash
+npm install
+```
+
+La CLI estable de Supabase és una dependència de desenvolupament local fixada. Utilitza sempre `npx supabase`; no cal ni s’ha d’instal·lar globalment.
 
 ```bash
 npm start
@@ -78,7 +86,7 @@ El mode demo és una eina de prova; no s’ha d’utilitzar com a font de verita
 ## Configuració de Supabase
 
 1. Crea un projecte Supabase.
-2. Valida primer `supabase/migrations/20260810143143_porra_live_v1.sql` en una base local descartable i aplica-la després amb `supabase db push`.
+2. Valida totes les migracions de `supabase/migrations/` en una base local descartable i aplica-les després amb `supabase db push`.
 3. Crea l’únic compte administrador a Supabase Auth.
 4. Insereix el seu UUID a `public.admin_profiles` des d’un entorn de servidor o el SQL Editor.
 5. Injecta al frontend la configuració pública basada en `config.example.js`:
@@ -95,7 +103,9 @@ Consulta [supabase/README.md](supabase/README.md) per al model i el desplegament
 
 - Supabase Auth només s’utilitza per a l’administrador i l’autorització depèn exclusivament de `admin_profiles`.
 - Els participants no creen compte.
-- Les reserves públiques entren per l’RPC transaccional `create_public_reservation`.
+- Les reserves públiques entren per l’RPC transaccional `create_public_reservation` i requereixen una invitació individual vàlida.
+- Cada invitació conté un token aleatori de 256 bits que només es mostra en generar-la; la base només en desa el hash SHA-256.
+- Una invitació permet crear exactament una participació i queda consumida dins de la mateixa transacció.
 - L’RPC utilitza bloquejos de transacció per impedir una tercera ocupació simultània.
 - La base de dades limita dues apostes actives per participant i dues places per casella.
 - El públic no pot modificar pagaments, resultats ni premis.
@@ -106,7 +116,9 @@ Consulta [supabase/README.md](supabase/README.md) per al model i el desplegament
 
 Les instruccions de pagament són privades: només es retornen després de reservar o amb el tracking individual. No hi introduïu telèfons ni comptes personals per a la beta.
 
-La protecció antiabús encara està pendent. Abans d’una beta compartida cal afegir invitació, CAPTCHA o rate limit; les restriccions SQL garanteixen integritat, però no impedeixen que una mateixa persona intenti crear moltes reserves.
+Les migracions antiabús invite-only `20260811102102_add_pool_invitations.sql` i `20260811104810_fix_pool_invitation_listing.sql` estan aplicades una sola vegada a `porra-live-beta`; la segona repara additivament el `pg_catalog.coalesce` històric sense modificar la migració aplicada.
+
+La matriu remota completa està validada amb PostgreSQL real: permisos admin/no-admin, tokens i hashes, errors uniformes, tracking privat, rollback, consum únic i les concurrències d’invitació, revocació i última plaça. Els advisors no mostren regressions i la neteja final confirma zero comptes o dades sintètiques residuals. El frontend encara no està connectat al backend invite-only. Turnstile i el rate limit continuen fora de l’abast actual.
 
 ## Regles de preus i capacitat
 
