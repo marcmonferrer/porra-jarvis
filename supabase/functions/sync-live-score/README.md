@@ -1,21 +1,18 @@
-# Sincronització automàtica del marcador
+# Sincronització desactivada amb API-Football
 
-La funció consulta API-Football i actualitza la fila `public.partit` de Supabase.
-Busca automàticament la final Espanya–Argentina del Mundial 2026 (`league=1`,
-`season=2026`) i després reutilitza l'identificador del partit.
+Aquesta Edge Function es conserva únicament com a referència local. Per a la beta de Porra Live està completament desactivada: no es desplega, no s’invoca, no té cron i no se’n configuren secrets.
 
-## Secrets necessaris
+La funció no busca ni inventa partits. Cal configurar explícitament l’identificador `fixtureId` d’API-Football per a cada porra i invocar-la amb:
 
-- `API_FOOTBALL_KEY`: clau gratuïta d'API-Sports.
-- `SYNC_SECRET`: text aleatori llarg que també ha d'enviar la tasca programada
-  a la capçalera `x-sync-secret`.
+- `poolId`: UUID de la porra.
+- `fixtureId`: opcional quan ja està guardat a `match_states.provider_fixture_id`.
+- Capçalera privada `x-sync-secret`.
 
-`SUPABASE_URL` i les claus secretes del projecte són proporcionades per
-Supabase a les Edge Functions.
+Secrets exclusivament del servidor:
 
-## Programació
+- `API_FOOTBALL_KEY`
+- `SYNC_SECRET`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `SUPABASE_URL`
 
-Desplega la funció sense verificació JWT i programa una invocació cada dos
-minuts. La funció només consulta API-Football entre les 20:50 i les 00:00,
-hora de Madrid, i s'atura abans si detecta `FT`, `AET` o `PEN`. Això manté el
-consum per sota de les 100 peticions diàries del pla gratuït.
+Qualsevol activació futura requerirà una decisió i una revisió de seguretat separades. En aquest cas haurà de limitar-se a la finestra del partit i llegir `SYNC_SECRET` des de Supabase Vault.

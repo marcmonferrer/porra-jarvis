@@ -3,262 +3,81 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
   <meta name="theme-color" content="#091a33">
-  <meta name="application-name" content="Finalíssima Porra">
-  <meta name="apple-mobile-web-app-title" content="Finalíssima Porra">
-  <meta name="description" content="Demo interactiva d'una porra digital Espanya–Argentina desenvolupada amb IA">
-  <link rel="canonical" href="https://marcmonferrer.github.io/finalissima-porra/">
-
+  <meta name="description" content="Porra Live: crea, comparteix i gestiona porres de futbol en directe.">
   <meta property="og:type" content="website">
-  <meta property="og:locale" content="ca_ES">
-  <meta property="og:site_name" content="Finalíssima Porra">
-  <meta property="og:title" content="Finalíssima · Demo interactiva">
-  <meta property="og:description" content="Demo interactiva d'una porra digital Espanya–Argentina desenvolupada amb IA">
-  <meta property="og:url" content="https://marcmonferrer.github.io/finalissima-porra/">
-  <meta property="og:image" content="https://marcmonferrer.github.io/finalissima-porra/social-card.png?v=1">
-  <meta property="og:image:secure_url" content="https://marcmonferrer.github.io/finalissima-porra/social-card.png?v=1">
-  <meta property="og:image:type" content="image/png">
-  <meta property="og:image:width" content="600">
-  <meta property="og:image:height" content="315">
-  <meta property="og:image:alt" content="Finalíssima — Espanya contra Argentina, porra digital desenvolupada amb IA">
-
+  <meta property="og:title" content="Porra Live">
+  <meta property="og:description" content="Partits, apostes i premis en directe.">
+  <meta property="og:image" content="https://marcmonferrer.github.io/finalissima-porra/social-card-porra-live.png">
+  <meta property="og:image:width" content="1732">
+  <meta property="og:image:height" content="908">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Finalíssima · Demo interactiva">
-  <meta name="twitter:description" content="Demo interactiva d'una porra digital Espanya–Argentina desenvolupada amb IA">
-  <meta name="twitter:image" content="https://marcmonferrer.github.io/finalissima-porra/social-card.png?v=1">
-
-  <title>Finalíssima · Demo interactiva</title>
-  <link rel="icon" href="favicon.svg?v=1" type="image/svg+xml">
+  <meta name="twitter:title" content="Porra Live">
+  <meta name="twitter:description" content="Partits, apostes i premis en directe.">
+  <meta name="twitter:image" content="https://marcmonferrer.github.io/finalissima-porra/social-card-porra-live.png">
+  <title>Porra Live · Porres compartides en directe</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="profile.css">
 </head>
 <body>
-  <header class="hero">
-    <div class="hero__eyebrow">FINALÍSSIMA · DEMO INTERACTIVA</div>
-    <h1>ESPAÑA 🇪🇸 <span>vs</span> ARGENTINA 🇦🇷</h1>
-    <p>Prototip funcional d’una porra digital creat per Marc Monferrer amb l’ajuda de la IA. Pots reservar caselles, simular pagaments, modificar el marcador i comprovar com es marquen automàticament els guanyadors.</p>
+  <header class="app-header">
+    <a class="brand" href="#public" aria-label="Porra Live, inici">
+      <span class="brand__mark">PL</span>
+      <span><strong>Porra Live</strong><small>Partits, apostes i premis en directe</small></span>
+    </a>
+    <nav class="main-nav" aria-label="Navegació principal">
+      <button type="button" data-view="public">Participar</button>
+      <button type="button" data-view="tracking">La meva aposta</button>
+      <button type="button" data-view="admin">Administració</button>
+    </nav>
   </header>
 
-  <main class="page-shell">
-    <section class="rules panel" aria-labelledby="rules-title">
-      <div class="section-heading">
-        <span class="section-heading__icon">🧪</span>
-        <div>
-          <p>Prova totes les funcionalitats</p>
-          <h2 id="rules-title">Mode demostració</h2>
-        </div>
-      </div>
-      <ul>
-        <li>La demo està <strong>sempre oberta</strong> i es pot reiniciar des dels controls.</li>
-        <li>Pots seleccionar un màxim de <strong>2 caselles</strong> per participant.</li>
-        <li>Els imports de <strong>4,50 €</strong>, el pot i els pagaments són completament simulats.</li>
-        <li>Espanya = <strong>X</strong> · Argentina = <strong>Y</strong> · Resultat: <strong>X–Y</strong>.</li>
-        <li><strong>Apostes especials:</strong> Messi marca 3 gols o més, Lamine en marca 2 o més, o hi ha més de 6 gols totals.</li>
-        <li><strong>Premis:</strong> 25% per al marcador al final de la primera part, 50% per al marcador dels 90 minuts i 25% per a les apostes especials.</li>
-        <li>La casella guanyadora es marca <strong>automàticament</strong> quan selecciones “Mitja part” o “Final” als controls.</li>
-        <li>Les dades es desen només al navegador d’aquest dispositiu. <strong>No hi ha pagaments ni dades personals reals.</strong></li>
-      </ul>
-      <p class="referee">Toca, prova i trenca coses: és exactament per això que existeix la demo 😄</p>
-    </section>
+  <div class="mode-banner" data-mode-banner role="status">
+    <strong>Mode demo local</strong>
+    <span>Les dades només es desen en aquest navegador. No és una porra real compartida.</span>
+  </div>
 
-    <div class="content-layout">
-      <section class="game panel" aria-labelledby="board-title">
-        <div class="section-heading section-heading--split">
-          <div class="section-heading__group">
-            <span class="section-heading__icon">🎯</span>
-            <div>
-              <p>Tria la teva aposta</p>
-              <h2 id="board-title">Resultats i apostes especials</h2>
-            </div>
-          </div>
-          <span class="availability" data-available>25 lliures · DEMO OBERTA</span>
-        </div>
-
-        <div class="stats" aria-live="polite">
-          <div class="stat">
-            <span>Ocupades</span>
-            <strong data-stat="occupied">0 / 25</strong>
-          </div>
-          <div class="stat stat--gold">
-            <span>Final · 50%</span>
-            <strong data-stat="final-prize">0,00 €</strong>
-          </div>
-          <div class="stat stat--sky">
-            <span>Mitja part · 25%</span>
-            <strong data-stat="half-prize">0,00 €</strong>
-          </div>
-          <div class="stat stat--special">
-            <span>Especials · 25%</span>
-            <strong data-stat="special-prize">0,00 €</strong>
-          </div>
-        </div>
-
-        <div class="entry-form">
-          <label for="participant-name">Nom del participant</label>
-          <div class="entry-form__row">
-            <input id="participant-name" type="text" maxlength="30" autocomplete="off" placeholder="Ex. Marc">
-            <button class="button button--primary" type="button" data-action="assign" disabled>Assignar caselles</button>
-          </div>
-          <p class="selection" data-selection>Escriu un nom i tria fins a 2 caselles.</p>
-        </div>
-
-        <div class="score-grid" data-grid aria-label="Resultats amb Espanya a l'eix horitzontal, Argentina a l'eix vertical i tres apostes especials"></div>
-
-        <div class="legend">
-          <span><i class="legend__swatch legend__swatch--picked"></i> Seleccionada</span>
-          <span><i class="legend__swatch legend__swatch--occupied"></i> Ocupada</span>
-          <span><i class="legend__swatch legend__swatch--special"></i> Aposta especial</span>
-          <span><i class="legend__swatch legend__swatch--winner"></i> Guanyadora</span>
-        </div>
-
-        <p class="feedback" data-feedback role="status" aria-live="polite"></p>
-
-        <div class="share-actions">
-          <button class="button" type="button" data-action="invite">Compartir invitació</button>
-          <button class="button" type="button" data-action="status">Compartir estat</button>
-        </div>
-      </section>
-
-      <aside class="sidebar">
-        <section class="scoreboard panel" aria-labelledby="scoreboard-title">
-          <div class="scoreboard__topline">
-            <span class="live-indicator" data-live-indicator><i></i><span data-live-label>PREPARTIT</span></span>
-            <span class="match-clock" data-clock>—</span>
-          </div>
-          <h2 id="scoreboard-title" class="visually-hidden">Marcador del partit</h2>
-          <div class="team-row">
-            <div class="team"><span class="team__flag">🇪🇸</span><span>España</span></div>
-            <strong data-score="spain">0</strong>
-          </div>
-          <div class="team-row">
-            <div class="team"><span class="team__flag">🇦🇷</span><span>Argentina</span></div>
-            <strong data-score="argentina">0</strong>
-          </div>
-          <div class="scoreboard__footer" data-match-note>Demo preparada per començar</div>
-        </section>
-
-        <section class="money panel" aria-labelledby="money-title">
-          <div class="section-heading">
-            <span class="section-heading__icon">💰</span>
-            <div>
-              <p>Seguiment simulat</p>
-              <h2 id="money-title">Pagaments</h2>
-            </div>
-          </div>
-          <div class="money__row"><span>Cobrat</span><strong data-money="collected">0,00 €</strong></div>
-          <div class="money__row"><span>Pendent</span><strong data-money="pending">0,00 €</strong></div>
-          <div class="money__row"><span>Developer</span><strong data-money="developer">0,00 €</strong></div>
-        </section>
-
-        <section class="admin-login panel" data-admin-login hidden>
-          <h3>🔐 Accés administrador</h3>
-          <label for="admin-email">Correu electrònic</label>
-          <input id="admin-email" type="email" autocomplete="username">
-          <label for="admin-password">Contrasenya</label>
-          <input id="admin-password" type="password" autocomplete="current-password">
-          <button class="button button--primary" type="button" data-action="admin-login">Iniciar sessió</button>
-          <p class="admin-login__feedback" data-auth-feedback></p>
-        </section>
-
-        <details class="admin panel" data-admin-controls open>
-          <summary>⚙️ Controls de demostració</summary>
-          <div class="admin__body">
-            <label for="match-phase">Estat del partit</label>
-            <select id="match-phase">
-              <option value="pre">Prepartit</option>
-              <option value="first">Primera part</option>
-              <option value="half">Mitja part</option>
-              <option value="second">Segona part</option>
-              <option value="final">Final</option>
-            </select>
-            <label for="match-minute">Minut</label>
-            <input id="match-minute" type="number" min="0" max="130" value="0">
-            <div class="admin-score">
-              <span>🇪🇸 España</span>
-              <button type="button" data-goal="spain:-1" aria-label="Restar un gol a Espanya">−</button>
-              <strong data-admin-score="spain">0</strong>
-              <button type="button" data-goal="spain:1" aria-label="Afegir un gol a Espanya">+</button>
-            </div>
-            <div class="admin-score">
-              <span>🇦🇷 Argentina</span>
-              <button type="button" data-goal="argentina:-1" aria-label="Restar un gol a Argentina">−</button>
-              <strong data-admin-score="argentina">0</strong>
-              <button type="button" data-goal="argentina:1" aria-label="Afegir un gol a Argentina">+</button>
-            </div>
-            <fieldset class="admin-specials">
-              <legend>Apostes especials</legend>
-              <label><input type="checkbox" data-special-result="messiHatTrick"> Messi marca 3 gols o més</label>
-              <label><input type="checkbox" data-special-result="lamineBrace"> Lamine marca 2 gols o més</label>
-              <label><input type="checkbox" data-special-result="moreThanSixGoals"> Més de 6 gols totals</label>
-            </fieldset>
-            <button class="button button--whatsapp" type="button" data-action="match-update">📲 Compartir actualització</button>
-            <button class="button" type="button" data-action="admin-logout">Reiniciar demo</button>
-            <p class="admin__hint">Els canvis només afecten aquesta demo local. Selecciona “Mitja part” o “Final” per marcar automàticament la casella guanyadora.</p>
-          </div>
-        </details>
-      </aside>
-    </div>
-
-    <section class="roster panel" data-roster-wrap hidden aria-labelledby="roster-title">
-      <div class="section-heading section-heading--split">
-        <div class="section-heading__group">
-          <span class="section-heading__icon">👥</span>
-          <div>
-            <p>Control de la demo</p>
-            <h2 id="roster-title">Participants</h2>
-          </div>
-        </div>
-        <span class="paid-summary" data-paid-summary></span>
-      </div>
-      <div class="roster__list" data-roster></div>
-    </section>
-
-    <section class="portfolio-profile" aria-labelledby="portfolio-profile-title">
-      <div class="portfolio-profile__kicker">
-        <span class="portfolio-profile__logo" aria-hidden="true">in</span>
-        <span>Professional profile</span>
-      </div>
-
-      <article class="portfolio-card">
-        <div class="portfolio-card__cover">
-          <span>AI CONSULTING · ACCESSIBILITY · WEB</span>
-        </div>
-        <div class="portfolio-card__body">
-          <div class="portfolio-card__identity">
-            <img class="portfolio-card__avatar" src="https://avatars.githubusercontent.com/u/305959669?v=4" alt="Marc Monferrer">
-            <div>
-              <h2 id="portfolio-profile-title">Marc Monferrer</h2>
-              <p>AI Consultant &amp; Front-End Developer</p>
-              <small>Barcelona, Catalonia, Spain · Catalan · Spanish · English</small>
-            </div>
-          </div>
-
-          <p class="portfolio-card__about">I turn real ideas and needs into practical solutions using AI, automation and web development, with a particular focus on accessibility and functional diversity.</p>
-
-          <div class="portfolio-card__tags" aria-label="Specialties">
-            <span>AI Consulting</span>
-            <span>Web &amp; automation</span>
-            <span>Accessibility</span>
-          </div>
-
-          <div class="portfolio-card__actions">
-            <a class="portfolio-card__linkedin" href="https://www.linkedin.com/in/marcmonferrer" target="_blank" rel="noopener noreferrer">View LinkedIn profile ↗</a>
-            <a class="portfolio-card__email" href="mailto:marcmonferrer.ai@gmail.com">Contact by email</a>
-          </div>
-        </div>
-      </article>
+  <main id="app" class="app-shell" aria-live="polite">
+    <section class="loading-state panel">
+      <span class="spinner" aria-hidden="true"></span>
+      <h1>Preparant Porra Live</h1>
+      <p>Carregant les porres i l’estat del partit…</p>
     </section>
   </main>
 
-  <footer class="site-footer">
-    <p class="site-footer__credit">Designed and developed by <a href="https://www.linkedin.com/in/marcmonferrer" target="_blank" rel="noopener noreferrer">Marc Monferrer</a> with AI CoPilot JARVIS</p>
-    <div class="developer-cta">
-      <strong>Necessites una experiència digital personalitzada?</strong>
-      <span>Prototips, automatitzacions i solucions amb intel·ligència artificial.</span>
-      <a href="https://www.linkedin.com/in/marcmonferrer" target="_blank" rel="noopener noreferrer">Parlem-ne →</a>
+  <section class="portfolio-profile compact-profile" aria-labelledby="portfolio-profile-title">
+    <div class="portfolio-profile__kicker">
+      <span class="portfolio-profile__logo" aria-hidden="true">in</span>
+      <span>Professional profile</span>
     </div>
+    <article class="portfolio-card">
+      <div class="portfolio-card__cover"><span>AI CONSULTING · ACCESSIBILITY · WEB</span></div>
+      <div class="portfolio-card__body">
+        <div class="portfolio-card__identity">
+          <img class="portfolio-card__avatar" src="https://avatars.githubusercontent.com/u/305959669?v=4" alt="Marc Monferrer">
+          <div>
+            <h2 id="portfolio-profile-title">Marc Monferrer</h2>
+            <p>AI Consultant &amp; Front-End Developer</p>
+            <small>Barcelona, Catalonia, Spain · Catalan · Spanish · English</small>
+          </div>
+        </div>
+        <p class="portfolio-card__about">I turn real ideas and needs into practical solutions using AI, automation and web development, with a particular focus on accessibility and functional diversity.</p>
+        <div class="portfolio-card__actions">
+          <a class="portfolio-card__linkedin" href="https://www.linkedin.com/in/marcmonferrer" target="_blank" rel="noopener noreferrer">View LinkedIn profile ↗</a>
+          <a class="portfolio-card__email" href="mailto:marcmonferrer.ai@gmail.com">Contact by email</a>
+        </div>
+      </div>
+    </article>
+  </section>
+
+  <footer class="site-footer">
+    <p>Designed and developed by <a href="https://www.linkedin.com/in/marcmonferrer" target="_blank" rel="noopener noreferrer">Marc Monferrer</a> with AI CoPilot JARVIS</p>
   </footer>
 
-  <script src="demo.js"></script>
+  <div class="toast" data-toast role="status" aria-live="polite"></div>
+  <script src="config.public.js"></script>
+  <script type="module" src="src/app.js"></script>
 </body>
 </html>
