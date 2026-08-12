@@ -9,6 +9,8 @@ import {
 } from "./core.js";
 import { participationState } from "./public-experience.js";
 
+export const BETA_SUPABASE_URL = "https://vczrkalsqdzwitpqwdwc.supabase.co";
+
 const STORAGE_KEY = "porra-live-demo-v1";
 
 function trackingPrizeFields(preview, betId) {
@@ -437,7 +439,7 @@ export class SupabaseRepository {
     return { pool, bets, participants, match, prizeResult: savedPrize, metrics: poolMetrics(pool, bets) };
   }
 
-  async createReservation({ poolId, name, cellKeys }) {
+  async createReservation({ poolId, name, cellKeys, invitationToken }) {
     const state = await this.getPublicPoolState(poolId);
     if (!state) throw new Error("No s'ha trobat la porra.");
     const participation = participationState(state);
@@ -445,7 +447,33 @@ export class SupabaseRepository {
     const { data, error } = await this.client.rpc("create_public_reservation", {
       target_pool_id: poolId,
       participant_name: name,
-      selected_cells: cellKeys
+      selected_cells: cellKeys,
+      invitation_token: invitationToken
+    });
+    if (error) throw error;
+    return data;
+  }
+
+  async createPoolInvitation(poolId, expiresAt) {
+    const { data, error } = await this.client.rpc("admin_create_pool_invitation", {
+      target_pool_id: poolId,
+      invitation_expires_at: expiresAt
+    });
+    if (error) throw error;
+    return data;
+  }
+
+  async listPoolInvitations(poolId) {
+    const { data, error } = await this.client.rpc("admin_list_pool_invitations", {
+      target_pool_id: poolId
+    });
+    if (error) throw error;
+    return data || [];
+  }
+
+  async revokePoolInvitation(invitationId) {
+    const { data, error } = await this.client.rpc("admin_revoke_pool_invitation", {
+      target_invitation_id: invitationId
     });
     if (error) throw error;
     return data;
@@ -571,6 +599,9 @@ export class SupabaseRepository {
 
 export async function createRepository(config = {}) {
   if (config.mode === "supabase" && config.supabaseUrl && config.supabasePublishableKey) {
+    if (config.supabaseUrl !== BETA_SUPABASE_URL) {
+      throw new Error("Aquesta versió del frontend només es pot connectar a porra-live-beta.");
+    }
     return SupabaseRepository.create(config);
   }
   return new DemoRepository();

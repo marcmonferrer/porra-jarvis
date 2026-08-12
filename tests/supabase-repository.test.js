@@ -101,3 +101,60 @@ test("l'estat públic sempre es torna a carregar mitjançant la RPC sanejada", a
     args: { pool_identifier: "classic-2026" }
   }]);
 });
+
+test("la reserva Supabase envia la invitació només a la RPC de quatre arguments", async () => {
+  const invitationToken = "b".repeat(64);
+  const response = {
+    token: "tracking-token",
+    bets: [{ cellKey: "1-0" }],
+    paymentInstructions: "Instruccions privades"
+  };
+  const client = rpcClient(response);
+  const repository = new SupabaseRepository(client);
+  repository.getPublicPoolState = async () => ({
+    pool: { status: "open", closesAt: "2099-01-01T00:00:00.000Z" },
+    match: { phase: "pre" }
+  });
+  const result = await repository.createReservation({
+    poolId: "pool-beta",
+    name: "Participant sintètic",
+    cellKeys: ["1-0"],
+    invitationToken
+  });
+  assert.deepEqual(client.calls, [{
+    name: "create_public_reservation",
+    args: {
+      target_pool_id: "pool-beta",
+      participant_name: "Participant sintètic",
+      selected_cells: ["1-0"],
+      invitation_token: invitationToken
+    }
+  }]);
+  assert.equal(result.token, "tracking-token");
+  assert.equal(result.paymentInstructions, "Instruccions privades");
+});
+
+test("les operacions administratives d'invitació usen exclusivament les RPC previstes", async () => {
+  const client = rpcClient({ invitationId: "invitation-1", status: "active" });
+  const repository = new SupabaseRepository(client);
+  await repository.createPoolInvitation("pool-1", "2099-01-01T00:00:00.000Z");
+  await repository.listPoolInvitations("pool-1");
+  await repository.revokePoolInvitation("invitation-1");
+  assert.deepEqual(client.calls, [
+    {
+      name: "admin_create_pool_invitation",
+      args: { target_pool_id: "pool-1", invitation_expires_at: "2099-01-01T00:00:00.000Z" }
+    },
+    { name: "admin_list_pool_invitations", args: { target_pool_id: "pool-1" } },
+    { name: "admin_revoke_pool_invitation", args: { target_invitation_id: "invitation-1" } }
+  ]);
+});
+
+test("el llistat administratiu no fabrica ni demana tokens crus", async () => {
+  const listing = [{ invitationId: "invitation-1", status: "active", createdAt: "2026-08-12T00:00:00Z" }];
+  const client = rpcClient(listing);
+  const repository = new SupabaseRepository(client);
+  assert.deepEqual(await repository.listPoolInvitations("pool-1"), listing);
+  assert.equal("invitationToken" in listing[0], false);
+  assert.equal("token_hash" in listing[0], false);
+});

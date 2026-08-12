@@ -29,17 +29,28 @@ import {
   trackingFinalState,
   trackingHalfTimeState
 } from "./public-experience.js";
+import {
+  INVALID_INVITATION_MESSAGE,
+  buildInvitationUrl,
+  buildWhatsAppInvitationUrl,
+  captureInvitationFromUrl,
+  isInvalidInvitationError,
+  isTerminalReservationError
+} from "./invitations.js";
 import { createRepository } from "./repository.js";
 
 const app = document.querySelector("#app");
 const toast = document.querySelector("[data-toast]");
 const config = window.PORRA_LIVE_CONFIG || { mode: "demo" };
+const invitation = captureInvitationFromUrl({ location, history: window.history });
 const repository = await createRepository(config);
 
-let view = location.hash.replace("#", "") || "public";
+let view = invitation.detected ? "public" : location.hash.replace("#", "") || "public";
 let currentPoolId = new URLSearchParams(location.search).get("pool");
 let selectedCells = [];
 let lastTrackingToken = new URLSearchParams(location.search).get("track") || "";
+let invitationNotice = invitation.valid ? "detected" : invitation.detected ? "invalid" : "missing";
+let lastCreatedInvitation = null;
 let activeAdminTab = "pool";
 let historySummaryPoolId = null;
 let adminMatchNotice = "";
@@ -227,6 +238,17 @@ async function resolveActivePool() {
   return pools.find(pool => pool.status === "open") || pools[0] || null;
 }
 
+function participantInvitationMarkup() {
+  if (repository.mode === "demo") return "";
+  if (invitationNotice === "detected" && invitation.hasToken()) {
+    return `<div class="notice invitation-notice"><strong>Invitació privada detectada</strong><p>Pots escollir una o dues caselles i confirmar una única participació.</p></div>`;
+  }
+  if (invitationNotice === "invalid") {
+    return `<div class="warning invitation-notice"><strong>Invitació no disponible</strong><p>${escapeHtml(INVALID_INVITATION_MESSAGE)}</p></div>`;
+  }
+  return `<div class="warning invitation-notice"><strong>Cal una invitació privada</strong><p>Obre l’enllaç personal que t’ha compartit l’administrador per poder reservar.</p></div>`;
+}
+
 async function renderPublic() {
   const pool = await resolveActivePool();
   if (!pool) {
@@ -244,6 +266,7 @@ async function renderPublic() {
   if (!canPlay) selectedCells = [];
   const selectionCost = selectedCells.length * pool.priceCents;
   const selectionPool = selectedCells.length * pool.poolPerBetCents;
+  const canSubmitReservation = selectedCells.length > 0 && (repository.mode === "demo" || invitation.hasToken());
   const phasePresentation = publicPhasePresentation(state.match);
   app.innerHTML = `${hero(pool, state.match)}${halfTimeMarkup(state)}${finalSummaryMarkup(state)}${metricsMarkup(state.metrics)}
     <div class="public-layout">
@@ -254,10 +277,10 @@ async function renderPublic() {
       <aside class="panel checkout-panel">
         <span class="eyebrow">${canPlay ? "2 · Confirma la participació" : phasePresentation.eyebrow}</span>
         <h2>${canPlay ? "La teva selecció" : phasePresentation.heading}</h2>
-        ${canPlay ? `<label>Nom del participant<input name="participantName" maxlength="50" autocomplete="name" placeholder="El teu nom"></label>
+        ${canPlay ? `${participantInvitationMarkup()}<label>Nom del participant<input name="participantName" maxlength="50" autocomplete="name" placeholder="El teu nom"></label>
           <div class="selection-summary">${selectedCells.length ? selectedCells.map(key => `<span>${escapeHtml(cellLabel(pool, key))}</span>`).join("") : `<p>Selecciona una o dues caselles diferents.</p>`}</div>
           <dl><div><dt>Cost total</dt><dd>${formatMoney(selectionCost)}</dd></div><div><dt>Destinat al pot</dt><dd>${formatMoney(selectionPool)}</dd></div></dl>
-          <button class="button primary wide" data-action="confirm-reservation" ${selectedCells.length ? "" : "disabled"}>Confirmar apostes</button>
+          <button class="button primary wide" data-action="confirm-reservation" ${canSubmitReservation ? "" : "disabled"}>Confirmar apostes</button>
           <small>La selecció rosa encara no ocupa plaça. En confirmar, la reserva queda pendent de verificar.</small>`
           : closedParticipationMarkup(state, participation)}
         <button class="button secondary wide" type="button" data-action="share-pool">Compartir per WhatsApp</button>
@@ -279,11 +302,21 @@ function liveMarkup(state) {
 }
 
 async function confirmReservation() {
+  if (repository.mode === "supabase" && !invitation.hasToken()) {
+    return notify(invitationNotice === "invalid" ? INVALID_INVITATION_MESSAGE : "Cal una invitació privada per reservar.", "error");
+  }
   const input = app.querySelector("[name='participantName']");
   const name = input?.value.trim();
   if (!name) return notify("Escriu el nom del participant.", "error");
   try {
-    const result = await repository.createReservation({ poolId: currentPoolId, name, cellKeys: selectedCells });
+    const result = await repository.createReservation({
+      poolId: currentPoolId,
+      name,
+      cellKeys: selectedCells,
+      invitationToken: repository.mode === "supabase" ? invitation.value() : undefined
+    });
+    invitation.clear();
+    invitationNotice = "used";
     lastTrackingToken = result.token || result.tracking_token;
     selectedCells = [];
     const state = await repository.getPoolState(currentPoolId);
@@ -297,7 +330,17 @@ async function confirmReservation() {
       <button class="button primary" data-view="tracking">Veure la meva aposta</button>
     </section>`;
   } catch (error) {
-    notify(error.message || "No s'ha pogut crear la reserva.", "error");
+    if (isInvalidInvitationError(error)) {
+      invitation.clear();
+      invitationNotice = "invalid";
+      notify(INVALID_INVITATION_MESSAGE, "error");
+    } else {
+      if (isTerminalReservationError(error)) {
+        invitation.clear();
+        invitationNotice = "missing";
+      }
+      notify(error.message || "No s'ha pogut crear la reserva.", "error");
+    }
     await renderPublic();
   }
 }
@@ -339,12 +382,48 @@ function adminPoolActions(pool) {
   return poolActions || resetAction ? `<div class="action-row">${poolActions}${resetAction}</div>` : "";
 }
 
+function invitationStatusLabel(status) {
+  return ({ active: "Activa", consumed: "Consumida", revoked: "Revocada", expired: "Caducada" })[status] || status;
+}
+
+function invitationExpiryValue() {
+  const date = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+  return date.toISOString().slice(0, 16);
+}
+
+function adminInvitationsMarkup(pool, invitations) {
+  if (repository.mode === "demo") {
+    return `<div class="section-heading"><div><span>Invite-only</span><h2>Invitacions privades</h2></div></div><div class="notice"><strong>Disponible al backend beta</strong><p>El mode demo continua funcionant localment sense invitacions ni crides remotes.</p></div>`;
+  }
+  if (!pool) return `<div class="empty-inline">Crea una porra abans de generar invitacions.</div>`;
+
+  let createdMarkup = "";
+  if (lastCreatedInvitation?.poolId === pool.id) {
+    const invitationUrl = buildInvitationUrl({
+      baseUrl: `${location.origin}${location.pathname}`,
+      poolSlug: pool.slug,
+      invitationToken: lastCreatedInvitation.invitationToken
+    });
+    const whatsappUrl = buildWhatsAppInvitationUrl({ invitationUrl, poolTitle: pool.title });
+    createdMarkup = `<div class="notice invitation-created"><strong>Invitació creada · copia-la ara</strong><p>Aquest enllaç secret només es pot obtenir d’aquesta resposta de creació. No es podrà recuperar des del llistat.</p><div class="private-link"><input readonly value="${escapeHtml(invitationUrl)}" aria-label="Enllaç privat d’invitació"><button class="button" type="button" data-copy="${escapeHtml(invitationUrl)}">Copiar</button></div><button class="button secondary" type="button" data-invitation-whatsapp="${escapeHtml(whatsappUrl)}">Compartir per WhatsApp</button></div>`;
+  }
+
+  const rows = invitations.map(item => `<article class="invitation-row"><div><strong>${invitationStatusLabel(item.status)}</strong><p>Creada: ${formatDateTime(item.createdAt)} · Caduca: ${formatDateTime(item.expiresAt)}</p></div>${item.status === "active" ? `<button class="button small danger" type="button" data-revoke-invitation="${escapeHtml(item.invitationId)}">Revocar</button>` : ""}</article>`).join("");
+  return `<div class="section-heading"><div><span>Invite-only</span><h2>Invitacions privades</h2></div><strong>${invitations.length} creades</strong></div>
+    <p>Cada invitació permet una única participació nova en aquesta porra.</p>
+    <form class="invitation-form" data-form="invitation"><label>Caducitat<input required name="expiresAt" type="datetime-local" value="${invitationExpiryValue()}"></label><button class="button primary" type="submit">Crear invitació</button></form>
+    ${createdMarkup}
+    <div class="invitation-list">${rows || `<div class="empty-inline">Encara no hi ha invitacions per a aquesta porra.</div>`}</div>`;
+}
+
 function clearDemoUiState() {
   currentPoolId = null;
   selectedCells = [];
   lastTrackingToken = "";
   historySummaryPoolId = null;
   adminMatchNotice = "";
+  lastCreatedInvitation = null;
   activeAdminTab = "pool";
   view = "admin";
   window.history.replaceState(null, "", `${location.pathname}#admin`);
@@ -353,6 +432,7 @@ function clearDemoUiState() {
 async function renderAdmin() {
   const session = await repository.getSession();
   if (repository.mode !== "demo" && !session?.user) {
+    lastCreatedInvitation = null;
     app.innerHTML = `<section class="tracking-entry panel"><span class="eyebrow">Accés protegit</span><h1>Administració de Porra Live</h1><p>Inicia sessió amb l’únic compte administrador configurat a Supabase.</p><form data-form="admin-login"><label>Correu electrònic<input required name="email" type="email" autocomplete="username"></label><label>Contrasenya<input required name="password" type="password" autocomplete="current-password"></label><button class="button primary">Iniciar sessió</button></form></section>`;
     return;
   }
@@ -360,12 +440,16 @@ async function renderAdmin() {
   const pool = currentPoolId ? pools.find(item => item.id === currentPoolId) : pools[0];
   if (pool) currentPoolId = pool.id;
   const state = pool ? await repository.getPoolState(pool.id) : null;
-  const historyStates = await Promise.all(pools.map(item => repository.getPoolState(item.id)));
+  const [historyStates, invitations] = await Promise.all([
+    Promise.all(pools.map(item => repository.getPoolState(item.id))),
+    pool && repository.mode === "supabase" ? repository.listPoolInvitations(pool.id) : Promise.resolve([])
+  ]);
   app.innerHTML = `<section class="admin-hero"><div><span class="eyebrow">Panell d’administració</span><h1>Gestiona Porra Live</h1><p>Crea porres, valida pagaments i publica els premis des d’un únic lloc.</p></div><div class="admin-session">${repository.mode === "demo" ? "Sessió demo" : escapeHtml(session.user.email)}${repository.mode === "demo" ? "" : `<button data-action="admin-logout">Sortir</button>`}</div></section>
     <div class="admin-tabs" role="tablist">
-      <button data-admin-tab="pool" class="${activeAdminTab === "pool" ? "active" : ""}">1. Porra</button><button data-admin-tab="bets" class="${activeAdminTab === "bets" ? "active" : ""}" ${pool ? "" : "disabled"}>2. Apostes</button><button data-admin-tab="match" class="${activeAdminTab === "match" ? "active" : ""}" ${pool ? "" : "disabled"}>3. Directe</button><button data-admin-tab="prizes" class="${activeAdminTab === "prizes" ? "active" : ""}" ${pool ? "" : "disabled"}>4. Premis</button><button data-admin-tab="history" class="${activeAdminTab === "history" ? "active" : ""}">5. Historial</button>
+      <button data-admin-tab="pool" class="${activeAdminTab === "pool" ? "active" : ""}">1. Porra</button><button data-admin-tab="invitations" class="${activeAdminTab === "invitations" ? "active" : ""}" ${pool ? "" : "disabled"}>2. Invitacions</button><button data-admin-tab="bets" class="${activeAdminTab === "bets" ? "active" : ""}" ${pool ? "" : "disabled"}>3. Apostes</button><button data-admin-tab="match" class="${activeAdminTab === "match" ? "active" : ""}" ${pool ? "" : "disabled"}>4. Directe</button><button data-admin-tab="prizes" class="${activeAdminTab === "prizes" ? "active" : ""}" ${pool ? "" : "disabled"}>5. Premis</button><button data-admin-tab="history" class="${activeAdminTab === "history" ? "active" : ""}">6. Historial</button>
     </div>
     <section class="panel admin-panel" data-admin-panel="pool" ${activeAdminTab === "pool" ? "" : "hidden"}><div class="section-heading"><div><span>Configuració</span><h2>${pool ? "Editar porra" : "Crear la primera porra"}</h2></div>${pool ? `<span class="status-pill status-${pool.status}">${statusLabel(pool.status)}</span>` : ""}</div>${poolForm(pool || {})}${adminPoolActions(pool)}</section>
+    <section class="panel admin-panel" data-admin-panel="invitations" ${activeAdminTab === "invitations" ? "" : "hidden"}>${adminInvitationsMarkup(pool, invitations)}</section>
     <section class="panel admin-panel" data-admin-panel="bets" ${activeAdminTab === "bets" ? "" : "hidden"}>${state ? adminBetsMarkup(state) : ""}</section>
     <section class="panel admin-panel" data-admin-panel="match" ${activeAdminTab === "match" ? "" : "hidden"}>${state ? adminMatchMarkup(state) : ""}</section>
     <section class="panel admin-panel" data-admin-panel="prizes" ${activeAdminTab === "prizes" ? "" : "hidden"}>${state ? adminPrizesMarkup(state) : ""}</section>
@@ -561,6 +645,7 @@ app.addEventListener("click", async event => {
   const viewButton = event.target.closest("[data-view]");
   if (viewButton) {
     view = viewButton.dataset.view;
+    if (view !== "admin") lastCreatedInvitation = null;
     location.hash = view;
     await render();
     return;
@@ -578,6 +663,10 @@ app.addEventListener("click", async event => {
     const pool = await repository.getPoolState(currentPoolId);
     const message = `${pool.pool.title}\n${matchName(pool.pool)}\nPartit: ${formatDateTime(pool.pool.matchAt)}\nTancament: ${formatDateTime(pool.pool.closesAt)}\nParticipa a Porra Live: ${location.origin}${location.pathname}?pool=${pool.pool.slug}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
+  }
+  const invitationWhatsApp = event.target.closest("[data-invitation-whatsapp]");
+  if (invitationWhatsApp) {
+    window.open(invitationWhatsApp.dataset.invitationWhatsapp, "_blank", "noopener,noreferrer");
   }
   const copy = event.target.closest("[data-copy]");
   if (copy) {
@@ -614,7 +703,13 @@ app.addEventListener("click", async event => {
     await renderAdmin();
   }
   const poolButton = event.target.closest("[data-pool]");
-  if (poolButton) { currentPoolId = poolButton.dataset.pool; await renderAdmin(); }
+  if (poolButton) { currentPoolId = poolButton.dataset.pool; lastCreatedInvitation = null; await renderAdmin(); }
+  const revokeInvitation = event.target.closest("[data-revoke-invitation]");
+  if (revokeInvitation) {
+    await repository.revokePoolInvitation(revokeInvitation.dataset.revokeInvitation);
+    notify("Invitació revocada.");
+    await renderAdmin();
+  }
   const historyButton = event.target.closest("[data-history-pool]");
   if (historyButton) { historySummaryPoolId = historyButton.dataset.historyPool; await renderAdmin(); }
   const review = event.target.closest("[data-prize-review]");
@@ -624,7 +719,7 @@ app.addEventListener("click", async event => {
     catch (error) { notify(error.message, "error"); }
   }
   if (event.target.closest("[data-action='clear-tracking']")) { lastTrackingToken = ""; await renderTracking(); }
-  if (event.target.closest("[data-action='admin-logout']")) { await repository.signOut(); notify("Sessió tancada."); await renderAdmin(); }
+  if (event.target.closest("[data-action='admin-logout']")) { lastCreatedInvitation = null; await repository.signOut(); notify("Sessió tancada."); await renderAdmin(); }
   if (event.target.closest("[data-action='retry']")) await render();
 });
 
@@ -646,6 +741,13 @@ app.addEventListener("submit", async event => {
       const data = new FormData(form);
       await repository.signIn(data.get("email"), data.get("password"));
       notify("Sessió iniciada.");
+      await renderAdmin();
+    }
+    if (form.dataset.form === "invitation") {
+      const expiresAt = new Date(new FormData(form).get("expiresAt")).toISOString();
+      const created = await repository.createPoolInvitation(currentPoolId, expiresAt);
+      lastCreatedInvitation = { poolId: currentPoolId, ...created };
+      notify("Invitació creada. Copia l’enllaç ara.");
       await renderAdmin();
     }
     if (form.dataset.form === "tracking") { lastTrackingToken = new FormData(form).get("token").trim(); await renderTracking(); }
@@ -678,6 +780,7 @@ document.querySelector(".app-header").addEventListener("click", async event => {
   const viewButton = event.target.closest("[data-view]");
   if (!viewButton) return;
   view = viewButton.dataset.view;
+  if (view !== "admin") lastCreatedInvitation = null;
   location.hash = view;
   await render();
 });

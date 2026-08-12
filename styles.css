@@ -179,7 +179,7 @@ dd { margin: 0; font-weight: 800; }
 .admin-hero h1 { margin: 6px 0; font-size: clamp(2rem, 4vw, 3.2rem); }
 .admin-hero p { margin: 0; color: #b9c6d9; }
 .admin-session { padding: 8px 12px; border-radius: 999px; color: #ffe9f2; background: rgba(255,47,134,.2); font-size: .8rem; font-weight: 800; }
-.admin-tabs { display: grid; grid-template-columns: repeat(5, 1fr); margin-bottom: 18px; overflow: hidden; border-radius: 0 0 18px 18px; background: #102647; }
+.admin-tabs { display: grid; grid-template-columns: repeat(6, 1fr); margin-bottom: 18px; overflow: hidden; border-radius: 0 0 18px 18px; background: #102647; }
 .admin-tabs button { padding: 15px 8px; border: 0; color: #abbad0; background: transparent; font-weight: 800; }
 .admin-tabs button.active { color: #fff; background: var(--pink); }
 .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
@@ -192,6 +192,13 @@ legend { padding: 0 8px; font-weight: 850; }
 .special-form-grid > div { display: grid; gap: 10px; padding: 14px; border-radius: 14px; background: #fff7fb; }
 .action-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--line); }
 .action-row .demo-reset { margin-left: auto; border-color: #f1c5cc; background: #fff8f9; }
+.invitation-notice { margin-bottom: 16px; }
+.invitation-form { display: flex; align-items: end; gap: 12px; margin: 20px 0; }
+.invitation-form label { flex: 1; }
+.invitation-created { margin: 20px 0; }
+.invitation-list { display: grid; gap: 10px; margin-top: 20px; }
+.invitation-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; }
+.invitation-row p { margin: 4px 0 0; color: var(--muted); }
 .table-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; }
 th, td { padding: 12px 8px; border-bottom: 1px solid var(--line); text-align: left; }
@@ -272,7 +279,7 @@ td:last-child { display: flex; gap: 6px; }
   .final-summary { grid-template-columns: 1fr; }
   .final-pending, .resolved-category, .public-participant-totals { grid-column: auto; }
   .live-results { justify-items: center; }
-  .admin-tabs { overflow-x: auto; grid-template-columns: repeat(5, minmax(125px, 1fr)); }
+  .admin-tabs { overflow-x: auto; grid-template-columns: repeat(6, minmax(125px, 1fr)); }
   .history-metrics { grid-template-columns: repeat(2, 1fr); }
 }
 
@@ -317,6 +324,7 @@ td:last-child { display: flex; gap: 6px; }
   .review-check, .admin-hero { align-items: stretch; flex-direction: column; }
   .tracking-entry form { display: grid; }
   .private-link { grid-template-columns: 1fr; }
+  .invitation-form, .invitation-row { align-items: stretch; flex-direction: column; }
   .section-heading { align-items: start; }
 }
 

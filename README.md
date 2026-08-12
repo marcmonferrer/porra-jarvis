@@ -73,7 +73,7 @@ npm run check
 
 ## Mode demo
 
-`config.public.js` activa per defecte `mode: "demo"`.
+El mode demo continua disponible injectant `mode: "demo"` en lloc de la configuració beta de `config.public.js`.
 
 - Les dades es desen a `localStorage` amb la clau `porra-live-demo-v1`.
 - El mode queda identificat amb una franja groga permanent.
@@ -84,6 +84,8 @@ npm run check
 El mode demo és una eina de prova; no s’ha d’utilitzar com a font de veritat d’una porra real.
 
 ## Configuració de Supabase
+
+El frontend local queda restringit explícitament a `porra-live-beta` (`vczrkalsqdzwitpqwdwc`). `config.public.js` conté únicament la URL del projecte i la seva clau `publishable`, que és pública per disseny; el repositori rebutja qualsevol altra URL Supabase. No s’hi inclou cap `service_role`, secret key ni credencial administrativa.
 
 1. Crea un projecte Supabase.
 2. Valida totes les migracions de `supabase/migrations/` en una base local descartable i aplica-les després amb `supabase db push`.
@@ -118,7 +120,16 @@ Les instruccions de pagament són privades: només es retornen després de reser
 
 Les migracions antiabús invite-only `20260811102102_add_pool_invitations.sql` i `20260811104810_fix_pool_invitation_listing.sql` estan aplicades una sola vegada a `porra-live-beta`; la segona repara additivament el `pg_catalog.coalesce` històric sense modificar la migració aplicada.
 
-La matriu remota completa està validada amb PostgreSQL real: permisos admin/no-admin, tokens i hashes, errors uniformes, tracking privat, rollback, consum únic i les concurrències d’invitació, revocació i última plaça. Els advisors no mostren regressions i la neteja final confirma zero comptes o dades sintètiques residuals. El frontend encara no està connectat al backend invite-only. Turnstile i el rate limit continuen fora de l’abast actual.
+La matriu remota completa està validada amb PostgreSQL real: permisos admin/no-admin, tokens i hashes, errors uniformes, tracking privat, rollback, consum únic i les concurrències d’invitació, revocació i última plaça. Els advisors no mostren regressions i la neteja final confirma zero comptes o dades sintètiques residuals. El frontend local ja està integrat exclusivament amb el backend invite-only de la beta; no s’ha desplegat. Turnstile i el rate limit continuen fora de l’abast actual.
+
+### Flux d’invitació del frontend
+
+- El participant obre un enllaç `?pool=<slug>#invite=<token>`; el fragment es valida, es copia a memòria i s’elimina immediatament amb `history.replaceState`.
+- El token no entra a `localStorage`, `sessionStorage`, cookies, estat persistent, logs ni telemetria. La política de referrer és `no-referrer`.
+- La reserva queda desactivada sense invitació i el token només s’envia com a quart argument de `create_public_reservation`.
+- Després d’un èxit, una invitació invàlida o un error terminal de porra/fase, la còpia en memòria s’elimina. Els errors d’invitació mostren sempre el mateix missatge públic.
+- El token de tracking i `paymentInstructions` conserven el comportament privat existent.
+- A Administració, la pestanya Invitacions crea, llista i revoca invitacions. El secret només apareix en la resposta de creació, dins de l’enllaç copiable i compartible per WhatsApp; els llistats només mostren dates i estat.
 
 ## Regles de preus i capacitat
 

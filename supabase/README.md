@@ -11,14 +11,14 @@ Les migracions versionades defineixen el backend compartit de Porra Live. Les qu
 | `migrations/20260811102102_add_pool_invitations.sql` | `20260811102102` | Invitacions privades d’un sol ús, RPC administratives i reserva pública protegida per capacitat secreta. Conserva immutable el defecte històric `pg_catalog.coalesce`. |
 | `migrations/20260811104810_fix_pool_invitation_listing.sql` | `20260811104810` | Repara additivament `admin_list_pool_invitations(uuid)` amb `coalesce` SQL vàlid i reasserta els permisos mínims. |
 
-L’historial remot està alineat amb els quatre fitxers locals. La reparació utilitza `CREATE OR REPLACE FUNCTION`, preserva el contracte i fa que la llista buida retorni correctament `[]` de tipus `jsonb`. El projecte no és encara un entorn públic: no té administrador persistent, dades de prova, credencials configurades al frontend ni desplegament compartit.
+L’historial remot està alineat amb els quatre fitxers locals. La reparació utilitza `CREATE OR REPLACE FUNCTION`, preserva el contracte i fa que la llista buida retorni correctament `[]` de tipus `jsonb`. El projecte no és encara un entorn públic: no té administrador persistent, dades de prova ni desplegament compartit. El frontend local només conté la configuració publishable de `porra-live-beta`.
 
 ## Arquitectura demo i Supabase
 
 - `DemoRepository` conserva tota la funcionalitat local a `localStorage` amb la clau `porra-live-demo-v1`.
 - `SupabaseRepository` s’activa només amb `mode: "supabase"`, URL i publishable key.
 - El frontend continua sent estàtic. Carrega `@supabase/supabase-js@2.111.0` des d’un URL ESM fixat.
-- Les reserves i lectures públiques passen exclusivament per RPC. El contracte del backend aplicat exigeix una invitació individual vàlida, però el frontend encara no està connectat a aquest flux.
+- Les reserves i lectures públiques passen exclusivament per RPC. El frontend beta envia la invitació individual únicament al quart argument de la reserva i manté el mode demo desacoblat.
 - L’administració utilitza Supabase Auth, RLS i RPC transaccionals per a les operacions compostes.
 - La CLI estable de Supabase està fixada com a dependència de desenvolupament local; totes les ordres del repositori s’executen amb `npx supabase`.
 
@@ -133,8 +133,8 @@ La passada amb dades exclusivament sintètiques confirma:
 ## Properes fases de `porra-live-beta`
 
 1. Amb una aprovació separada, crear l’únic administrador permanent i afegir el seu UUID a `admin_profiles` des d’un entorn privilegiat.
-2. Configurar al frontend únicament la URL i la publishable key del projecte de validació.
-3. Adaptar el frontend perquè transporti el token d’invitació sense exposar-lo en logs o referers.
+2. Fer les proves manuals de navegador amb un administrador, una porra i invitacions exclusivament sintètiques a `porra-live-beta`.
+3. Confirmar còpia i compartició per WhatsApp, consum únic, tracking i instruccions de pagament des de navegadors separats.
 4. Repetir la validació completa abans d’un desplegament públic.
 
-No s’ha de connectar el frontend, crear usuaris o dades, ni desplegar públicament sense una aprovació posterior expressa. `finalissima-porra` queda fora d’aquest flux.
+El frontend local està configurat únicament amb la URL i la clau publishable de `porra-live-beta`; no s’han creat usuaris ni dades durant aquesta integració i no s’ha desplegat públicament. `finalissima-porra` queda fora d’aquest flux.
