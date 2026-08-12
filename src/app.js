@@ -308,6 +308,7 @@ async function confirmReservation() {
   const input = app.querySelector("[name='participantName']");
   const name = input?.value.trim();
   if (!name) return notify("Escriu el nom del participant.", "error");
+  view = "reservation-submitting";
   try {
     const result = await repository.createReservation({
       poolId: currentPoolId,
@@ -319,6 +320,7 @@ async function confirmReservation() {
     invitationNotice = "used";
     lastTrackingToken = result.token || result.tracking_token;
     selectedCells = [];
+    view = "reservation-success";
     const state = await repository.getPoolState(currentPoolId);
     const trackUrl = `${location.origin}${location.pathname}?track=${encodeURIComponent(lastTrackingToken)}#tracking`;
     app.innerHTML = `${hero(state.pool, state.match)}<section class="success-state panel">
@@ -330,6 +332,7 @@ async function confirmReservation() {
       <button class="button primary" data-view="tracking">Veure la meva aposta</button>
     </section>`;
   } catch (error) {
+    view = "public";
     if (isInvalidInvitationError(error)) {
       invitation.clear();
       invitationNotice = "invalid";
@@ -597,6 +600,7 @@ async function renderTracking() {
   };
   app.innerHTML = `${hero(tracking.pool, tracking.match)}<section class="tracking-card panel"><div class="section-heading"><div><span>Seguiment privat</span><h2>${escapeHtml(tracking.participant.name)}</h2></div><strong>${formatMoney(total)}</strong></div>
     ${participation.open ? "" : `<div class="notice tracking-readonly"><strong>Mode només lectura</strong><p>${escapeHtml(participation.message)}</p></div>`}
+    <div class="payment-box"><strong>Instruccions de pagament</strong><p>${escapeHtml(tracking.pool.paymentInstructions || "L’administrador encara no ha configurat les instruccions.")}</p></div>
     <div class="tracking-bets">${tracking.bets.map(bet => { const halfState = trackingHalfTimeState({ pool: tracking.pool, match: tracking.match, bet }); const finalState = trackingFinalState({ pool: tracking.pool, match: tracking.match, bet }); return `<article><div><strong>${escapeHtml(cellLabel(tracking.pool, bet.cellKey))}</strong><span class="payment-status ${bet.paymentStatus}">${paymentLabel(bet.paymentStatus)}</span></div><dl><div><dt>Estat</dt><dd>${bet.paymentStatus === "paid" ? "Participa en els premis" : bet.paymentStatus === "pending" ? "Pendent de verificar pagament" : "Reserva alliberada"}</dd></div><div><dt>Descans</dt><dd>${halfState.label}${halfState.won ? ` · ${formatMoney(bet.halfPrizeCents)}` : ""}</dd></div>${tracking.match.phase === "final" ? `<div><dt>Resultat final</dt><dd>${finalState.finalLabel}${finalState.finalWon ? ` · ${formatMoney(bet.finalPrizeCents)}` : ""}</dd></div><div><dt>Especial</dt><dd>${finalState.specialLabel}${finalState.specialWon ? ` · ${formatMoney(bet.specialPrizeCents)}` : ""}</dd></div>${bet.redistributionPrizeCents ? `<div><dt>Redistribució</dt><dd>${formatMoney(bet.redistributionPrizeCents)}</dd></div>` : ""}` : ""}<div><dt>Opcions</dt><dd>${chance(bet)}</dd></div><div><dt>${tracking.match.phase === "final" ? "Premi total" : `Premi ${tracking.final ? "definitiu" : "provisional"}`}</dt><dd>${formatMoney(bet.prizeCents || 0)}</dd></div></dl></article>`; }).join("")}</div>
     ${liveMarkup({ pool: tracking.pool, match: tracking.match })}
     <p class="privacy-note">Aquest enllaç és privat. No el comparteixis públicament.</p></section>`;
@@ -676,6 +680,10 @@ app.addEventListener("click", async event => {
   const tab = event.target.closest("[data-admin-tab]");
   if (tab) {
     activeAdminTab = tab.dataset.adminTab;
+    if (activeAdminTab !== "invitations") {
+      lastCreatedInvitation = null;
+      app.querySelector(".invitation-created")?.remove();
+    }
     document.querySelectorAll("[data-admin-tab]").forEach(item => item.classList.toggle("active", item === tab));
     document.querySelectorAll("[data-admin-panel]").forEach(panel => { panel.hidden = panel.dataset.adminPanel !== tab.dataset.adminTab; });
   }

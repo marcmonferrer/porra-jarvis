@@ -111,3 +111,23 @@ test("l'aplicació captura abans de connectar, neteja el token i integra els tre
   assert.match(appSource, /repository\.revokePoolInvitation/);
   assert.doesNotMatch(appSource, /console\./);
 });
+
+test("la resposta original d'invitació s'oblida en abandonar la pestanya i no es pot recuperar del llistat", () => {
+  const appSource = readFileSync(new URL("../src/app.js", import.meta.url), "utf8");
+  const repositorySource = readFileSync(new URL("../src/repository.js", import.meta.url), "utf8");
+  assert.match(appSource, /activeAdminTab = tab\.dataset\.adminTab;\s*if \(activeAdminTab !== "invitations"\) \{\s*lastCreatedInvitation = null;\s*app\.querySelector\("\.invitation-created"\)\?\.remove\(\);/);
+  assert.match(appSource, /lastCreatedInvitation\?\.poolId === pool\.id/);
+  assert.doesNotMatch(repositorySource.match(/async listPoolInvitations[\s\S]*?\n  }/)[0], /invitationToken|token_hash/);
+});
+
+test("Realtime no pot esborrar la resposta privada de reserva i el tracking mostra el pagament protegit", () => {
+  const appSource = readFileSync(new URL("../src/app.js", import.meta.url), "utf8");
+  const submittingAt = appSource.indexOf('view = "reservation-submitting"');
+  const reservationAt = appSource.indexOf("await repository.createReservation");
+  const successAt = appSource.indexOf('view = "reservation-success"');
+  const trackingPaymentAt = appSource.indexOf("tracking.pool.paymentInstructions");
+  assert.ok(submittingAt >= 0 && submittingAt < reservationAt);
+  assert.ok(successAt > reservationAt);
+  assert.ok(trackingPaymentAt > successAt);
+  assert.match(appSource, /catch \(error\) \{\s*view = "public";/);
+});
