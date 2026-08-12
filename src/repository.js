@@ -12,6 +12,14 @@ import { participationState } from "./public-experience.js";
 export const BETA_SUPABASE_URL = "https://vczrkalsqdzwitpqwdwc.supabase.co";
 
 const STORAGE_KEY = "porra-live-demo-v1";
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+export function requireSupabaseUuid(value, label = "identificador") {
+  if (typeof value !== "string" || !UUID_PATTERN.test(value)) {
+    throw new Error(`El ${label} de Supabase no és un UUID vàlid.`);
+  }
+  return value;
+}
 
 function trackingPrizeFields(preview, betId) {
   const award = (preview?.awards || []).find(item => item.betId === betId);
@@ -82,7 +90,7 @@ export class DemoRepository {
 
   async savePool(input) {
     const current = input.id ? await this.getPool(input.id) : null;
-    const pool = createPool({ ...current, ...input, id: current?.id || input.id });
+    const pool = createPool({ ...current, ...input, id: current?.id || input.id || makeId("pool") });
     if (current) {
       this.data.pools = this.data.pools.map(item => item.id === pool.id ? pool : item);
     } else {
@@ -311,7 +319,11 @@ export class SupabaseRepository {
   async listAdminPools() {
     const { data, error } = await this.client.from("pools").select("*, special_bets(*)").order("created_at", { ascending: false });
     if (error) throw error;
-    return data.map(row => this.mapPool(row));
+    return data.map(row => {
+      const pool = this.mapPool(row);
+      requireSupabaseUuid(pool.id, "pool");
+      return pool;
+    });
   }
 
   async getPublicPoolState(poolIdOrSlug = "") {
@@ -355,6 +367,8 @@ export class SupabaseRepository {
   async savePool(input) {
     const session = await this.getSession();
     if (!session?.user) throw new Error("Cal iniciar sessió com a administrador.");
+    if (input.id) requireSupabaseUuid(input.id, "pool");
+    requireSupabaseUuid(session.user.id, "usuari administrador");
     const current = input.id ? await this.getPool(input.id) : null;
     const pool = createPool({ ...current, ...input, id: input.id });
     const payload = {
@@ -368,8 +382,11 @@ export class SupabaseRepository {
       payment_instructions: pool.paymentInstructions, status: current?.status || "draft",
       created_by: current?.createdBy || session.user.id, updated_at: new Date().toISOString()
     };
-    const { data, error } = await this.client.from("pools").upsert(payload).select().single();
+    const poolTable = this.client.from("pools");
+    const mutation = pool.id ? poolTable.upsert(payload) : poolTable.insert(payload);
+    const { data, error } = await mutation.select().single();
     if (error) throw error;
+    requireSupabaseUuid(data.id, "pool retornat");
     const specials = pool.specials.map((item, index) => ({
       pool_id: data.id, cell_key: item.cellKey, title: item.title,
       description: item.description || "", sort_order: index + 1
@@ -384,6 +401,7 @@ export class SupabaseRepository {
   }
 
   async setPoolStatus(poolId, status, extra = {}) {
+    requireSupabaseUuid(poolId, "pool");
     const { error } = await this.client.from("pools").update({ status, ...extra, updated_at: new Date().toISOString() }).eq("id", poolId);
     if (error) throw error;
     return this.getPool(poolId);
@@ -455,6 +473,7 @@ export class SupabaseRepository {
   }
 
   async createPoolInvitation(poolId, expiresAt) {
+    requireSupabaseUuid(poolId, "pool");
     const { data, error } = await this.client.rpc("admin_create_pool_invitation", {
       target_pool_id: poolId,
       invitation_expires_at: expiresAt
@@ -464,6 +483,7 @@ export class SupabaseRepository {
   }
 
   async listPoolInvitations(poolId) {
+    requireSupabaseUuid(poolId, "pool");
     const { data, error } = await this.client.rpc("admin_list_pool_invitations", {
       target_pool_id: poolId
     });
@@ -472,6 +492,7 @@ export class SupabaseRepository {
   }
 
   async revokePoolInvitation(invitationId) {
+    requireSupabaseUuid(invitationId, "invitació");
     const { data, error } = await this.client.rpc("admin_revoke_pool_invitation", {
       target_invitation_id: invitationId
     });
@@ -495,6 +516,7 @@ export class SupabaseRepository {
   }
 
   async updateBet(betId, patch) {
+    requireSupabaseUuid(betId, "aposta");
     const payload = {};
     if (patch.cellKey) payload.cell_key = patch.cellKey;
     if (patch.paymentStatus) {
@@ -508,6 +530,7 @@ export class SupabaseRepository {
   }
 
   async updateParticipant(participantId, name) {
+    requireSupabaseUuid(participantId, "participant");
     const { data, error } = await this.client.from("participants").update({
       display_name: name.trim(), normalized_name: name.trim().toLocaleLowerCase("ca"), updated_at: new Date().toISOString()
     }).eq("id", participantId).select().single();
@@ -516,6 +539,8 @@ export class SupabaseRepository {
   }
 
   async updateReservation(participantId, { name, bets }) {
+    requireSupabaseUuid(participantId, "participant");
+    bets.forEach(bet => requireSupabaseUuid(bet.id, "aposta"));
     const { data, error } = await this.client.rpc("admin_update_reservation", {
       target_participant_id: participantId,
       participant_name: name,
@@ -526,6 +551,7 @@ export class SupabaseRepository {
   }
 
   async updateReservationPayment(participantId, paymentStatus) {
+    requireSupabaseUuid(participantId, "participant");
     const payload = { payment_status: paymentStatus, updated_at: new Date().toISOString() };
     if (paymentStatus === "paid") payload.paid_at = new Date().toISOString();
     if (paymentStatus === "released") payload.released_at = new Date().toISOString();
@@ -535,6 +561,7 @@ export class SupabaseRepository {
   }
 
   async updateMatch(poolId, patch) {
+    requireSupabaseUuid(poolId, "pool");
     const { data, error } = await this.client.rpc("admin_update_match", {
       target_pool_id: poolId,
       match_patch: patch
@@ -544,6 +571,7 @@ export class SupabaseRepository {
   }
 
   async finalizePool(poolId) {
+    requireSupabaseUuid(poolId, "pool");
     const state = await this.getPoolState(poolId);
     if (state.metrics.pendingPlaces > 0) throw new Error("Cal confirmar o alliberar totes les apostes pendents abans de finalitzar.");
     if (state.match.phase !== "final") throw new Error("Cal desar el partit en fase Final abans de publicar els premis.");

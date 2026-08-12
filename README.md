@@ -87,6 +87,8 @@ El mode demo és una eina de prova; no s’ha d’utilitzar com a font de verita
 
 El frontend local queda restringit explícitament a `porra-live-beta` (`vczrkalsqdzwitpqwdwc`). `config.public.js` conté únicament la URL del projecte i la seva clau `publishable`, que és pública per disseny; el repositori rebutja qualsevol altra URL Supabase. No s’hi inclou cap `service_role`, secret key ni credencial administrativa.
 
+En mode Supabase, les porres noves s’insereixen sense `id` perquè PostgreSQL generi l’UUID natiu; el frontend adopta exclusivament l’UUID retornat. Els identificadors locals amb prefix `pool-` es generen i s’accepten només dins de `DemoRepository`, i totes les operacions administratives Supabase validen els UUID abans de fer cap crida remota.
+
 1. Crea un projecte Supabase.
 2. Valida totes les migracions de `supabase/migrations/` en una base local descartable i aplica-les després amb `supabase db push`.
 3. Crea l’únic compte administrador a Supabase Auth.

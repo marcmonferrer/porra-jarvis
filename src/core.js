@@ -340,9 +340,8 @@ export function createPool(input = {}) {
   if (priceCents !== poolPerBetCents + feeCents) {
     throw new Error("El preu ha de coincidir amb la suma del pot i la gestió.");
   }
-  const id = input.id || makeId("pool");
   return {
-    id,
+    id: input.id || null,
     slug: input.slug || slugify(input.title),
     title: String(input.title || "").trim(),
     homeTeam: String(input.homeTeam || "").trim(),

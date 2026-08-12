@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { SupabaseRepository } from "../src/repository.js";
+import { DemoRepository, SupabaseRepository } from "../src/repository.js";
+
+const POOL_ID = "6237e206-e429-4cf3-b585-d824c200a004";
+const PARTICIPANT_ID = "55ac0225-cecc-4db2-aeba-234f296453c7";
+const BET_ONE_ID = "6af67dfc-e2d5-47cd-a99b-c1fe416f8912";
+const BET_TWO_ID = "84c0207f-ec2a-438d-bca4-7af370ed6bdb";
+const INVITATION_ID = "89202043-8268-4e61-ae9a-48c87056bee1";
+const ADMIN_ID = "cf34e45d-fc3e-4258-84a3-5e81edfc5a37";
 
 function rpcClient(result = { ok: true }) {
   const calls = [];
@@ -16,16 +23,16 @@ function rpcClient(result = { ok: true }) {
 test("updateReservation delega tota la mutació a una única RPC", async () => {
   const client = rpcClient();
   const repository = new SupabaseRepository(client);
-  await repository.updateReservation("participant-1", {
+  await repository.updateReservation(PARTICIPANT_ID, {
     name: "Laia",
-    bets: [{ id: "bet-1", cellKey: "1-0" }, { id: "bet-2", cellKey: "2-1" }]
+    bets: [{ id: BET_ONE_ID, cellKey: "1-0" }, { id: BET_TWO_ID, cellKey: "2-1" }]
   });
   assert.deepEqual(client.calls, [{
     name: "admin_update_reservation",
     args: {
-      target_participant_id: "participant-1",
+      target_participant_id: PARTICIPANT_ID,
       participant_name: "Laia",
-      bet_updates: [{ id: "bet-1", cellKey: "1-0" }, { id: "bet-2", cellKey: "2-1" }]
+      bet_updates: [{ id: BET_ONE_ID, cellKey: "1-0" }, { id: BET_TWO_ID, cellKey: "2-1" }]
     }
   }]);
 });
@@ -38,10 +45,10 @@ test("updateMatch delega marcador i especials a una única RPC", async () => {
     halfHome: 1, halfAway: 0, finalHome: null, finalAway: null,
     specialStatuses: { "3-3": "pending" }
   };
-  await repository.updateMatch("pool-1", patch);
+  await repository.updateMatch(POOL_ID, patch);
   assert.deepEqual(client.calls, [{
     name: "admin_update_match",
-    args: { target_pool_id: "pool-1", match_patch: patch }
+    args: { target_pool_id: POOL_ID, match_patch: patch }
   }]);
 });
 
@@ -49,8 +56,8 @@ test("finalizePool calcula una vegada i desa amb una única RPC transaccional", 
   const client = rpcClient();
   const repository = new SupabaseRepository(client);
   repository.getPoolState = async () => ({
-    pool: { id: "pool-1", poolPerBetCents: 350, carryoverCents: 0 },
-    bets: [{ id: "bet-1", participantId: "p1", cellKey: "1-0", paymentStatus: "paid" }],
+    pool: { id: POOL_ID, poolPerBetCents: 350, carryoverCents: 0 },
+    bets: [{ id: BET_ONE_ID, participantId: PARTICIPANT_ID, cellKey: "1-0", paymentStatus: "paid" }],
     match: {
       phase: "final", minute: 90, currentHome: 1, currentAway: 0,
       halfHome: 1, halfAway: 0, finalHome: 1, finalAway: 0,
@@ -58,7 +65,7 @@ test("finalizePool calcula una vegada i desa amb una única RPC transaccional", 
     },
     metrics: { pendingPlaces: 0 }
   });
-  const result = await repository.finalizePool("pool-1");
+  const result = await repository.finalizePool(POOL_ID);
   assert.equal(client.calls.length, 1);
   assert.equal(client.calls[0].name, "admin_finalize_pool");
   assert.equal(client.calls[0].args.prize_calculation.totalPotCents, 350);
@@ -134,27 +141,128 @@ test("la reserva Supabase envia la invitació només a la RPC de quatre argument
   assert.equal(result.paymentInstructions, "Instruccions privades");
 });
 
-test("les operacions administratives d'invitació usen exclusivament les RPC previstes", async () => {
-  const client = rpcClient({ invitationId: "invitation-1", status: "active" });
+test("les operacions administratives d'invitació usen exclusivament UUID natius", async () => {
+  const client = rpcClient({ invitationId: INVITATION_ID, status: "active" });
   const repository = new SupabaseRepository(client);
-  await repository.createPoolInvitation("pool-1", "2099-01-01T00:00:00.000Z");
-  await repository.listPoolInvitations("pool-1");
-  await repository.revokePoolInvitation("invitation-1");
+  await repository.createPoolInvitation(POOL_ID, "2099-01-01T00:00:00.000Z");
+  await repository.listPoolInvitations(POOL_ID);
+  await repository.revokePoolInvitation(INVITATION_ID);
   assert.deepEqual(client.calls, [
     {
       name: "admin_create_pool_invitation",
-      args: { target_pool_id: "pool-1", invitation_expires_at: "2099-01-01T00:00:00.000Z" }
+      args: { target_pool_id: POOL_ID, invitation_expires_at: "2099-01-01T00:00:00.000Z" }
     },
-    { name: "admin_list_pool_invitations", args: { target_pool_id: "pool-1" } },
-    { name: "admin_revoke_pool_invitation", args: { target_invitation_id: "invitation-1" } }
+    { name: "admin_list_pool_invitations", args: { target_pool_id: POOL_ID } },
+    { name: "admin_revoke_pool_invitation", args: { target_invitation_id: INVITATION_ID } }
   ]);
 });
 
 test("el llistat administratiu no fabrica ni demana tokens crus", async () => {
-  const listing = [{ invitationId: "invitation-1", status: "active", createdAt: "2026-08-12T00:00:00Z" }];
+  const listing = [{ invitationId: INVITATION_ID, status: "active", createdAt: "2026-08-12T00:00:00Z" }];
   const client = rpcClient(listing);
   const repository = new SupabaseRepository(client);
-  assert.deepEqual(await repository.listPoolInvitations("pool-1"), listing);
+  assert.deepEqual(await repository.listPoolInvitations(POOL_ID), listing);
   assert.equal("invitationToken" in listing[0], false);
   assert.equal("token_hash" in listing[0], false);
+});
+
+function poolMutationClient() {
+  const calls = [];
+  const response = {
+    id: POOL_ID,
+    slug: "beta-pool",
+    title: "Beta pool"
+  };
+  const mutation = {
+    select() { return this; },
+    async single() { return { data: response, error: null }; }
+  };
+  return {
+    calls,
+    auth: { async getSession() { return { data: { session: { user: { id: ADMIN_ID } } }, error: null }; } },
+    from(table) {
+      return {
+        insert(payload) { calls.push({ table, operation: "insert", payload }); return mutation; },
+        upsert(payload, options) {
+          calls.push({ table, operation: "upsert", payload, options });
+          if (table === "special_bets") return Promise.resolve({ error: null });
+          return mutation;
+        }
+      };
+    }
+  };
+}
+
+test("la creació Supabase omet l'id local i adopta l'UUID retornat pel backend", async () => {
+  const client = poolMutationClient();
+  const repository = new SupabaseRepository(client);
+  repository.getPool = async id => ({ id, slug: "beta-pool" });
+  const saved = await repository.savePool({
+    title: "Beta pool",
+    homeTeam: "Local",
+    awayTeam: "Visitant",
+    matchAt: "2099-01-01T20:00:00.000Z",
+    closesAt: "2099-01-01T19:00:00.000Z",
+    price: "4",
+    poolPerBet: "3.5",
+    fee: "0.5",
+    paymentInstructions: "Instruccions privades",
+    specials: [{ title: "E1" }, { title: "E2" }, { title: "E3" }, { title: "E4" }]
+  });
+  const poolInsert = client.calls.find(call => call.table === "pools");
+  assert.equal(poolInsert.operation, "insert");
+  assert.equal("id" in poolInsert.payload, false);
+  assert.equal(saved.id, POOL_ID);
+  assert.ok(client.calls.filter(call => call.table === "special_bets").every(call =>
+    call.payload.every(item => item.pool_id === POOL_ID)
+  ));
+});
+
+test("els identificadors demo no poden arribar a cap operació de SupabaseRepository", async () => {
+  const client = rpcClient();
+  client.auth = { async getSession() { return { data: { session: { user: { id: ADMIN_ID } } }, error: null }; } };
+  const repository = new SupabaseRepository(client);
+  await assert.rejects(() => repository.savePool({ id: `pool-${POOL_ID}` }), /no és un UUID vàlid/);
+  const demoPoolId = `pool-${POOL_ID}`;
+  const demoParticipantId = `participant-${PARTICIPANT_ID}`;
+  const demoBetId = `bet-${BET_ONE_ID}`;
+  const blockedOperations = [
+    () => repository.publishPool(demoPoolId),
+    () => repository.setPoolStatus(demoPoolId, "open"),
+    () => repository.createPoolInvitation(demoPoolId, "2099-01-01T00:00:00.000Z"),
+    () => repository.listPoolInvitations(demoPoolId),
+    () => repository.revokePoolInvitation(`invitation-${INVITATION_ID}`),
+    () => repository.updateBet(demoBetId, {}),
+    () => repository.updateParticipant(demoParticipantId, "Nom"),
+    () => repository.updateReservation(demoParticipantId, { name: "Nom", bets: [{ id: demoBetId, cellKey: "1-0" }] }),
+    () => repository.updateReservationPayment(demoParticipantId, "paid"),
+    () => repository.updateMatch(demoPoolId, {}),
+    () => repository.finalizePool(demoPoolId)
+  ];
+  for (const operation of blockedOperations) {
+    await assert.rejects(operation, /no és un UUID vàlid/);
+  }
+  assert.deepEqual(client.calls, []);
+});
+
+test("la càrrega administrativa rebutja pools que no portin un UUID retornat pel backend", async () => {
+  const client = {
+    from() {
+      return {
+        select() { return this; },
+        async order() {
+          return { data: [{ id: `pool-${POOL_ID}`, slug: "leak", special_bets: [] }], error: null };
+        }
+      };
+    }
+  };
+  const repository = new SupabaseRepository(client);
+  await assert.rejects(() => repository.listAdminPools(), /no és un UUID vàlid/);
+});
+
+test("DemoRepository conserva els identificadors pool- exclusivament en mode demo", async () => {
+  const memory = { value: null, getItem() { return this.value; }, setItem(_key, value) { this.value = value; } };
+  const repository = new DemoRepository(memory);
+  const saved = await repository.savePool({ title: "Demo", price: 4, poolPerBet: 3.5, fee: 0.5 });
+  assert.match(saved.id, /^pool-[0-9a-f-]+$/);
 });
