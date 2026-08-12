@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
-import { DemoRepository, SupabaseRepository } from "../src/repository.js";
+import { ADMIN_POOL_SELECT, DemoRepository, SupabaseRepository } from "../src/repository.js";
 
 const POOL_ID = "6237e206-e429-4cf3-b585-d824c200a004";
 const PARTICIPANT_ID = "55ac0225-cecc-4db2-aeba-234f296453c7";
@@ -258,6 +259,40 @@ test("la càrrega administrativa rebutja pools que no portin un UUID retornat pe
   };
   const repository = new SupabaseRepository(client);
   await assert.rejects(() => repository.listAdminPools(), /no és un UUID vàlid/);
+});
+
+test("la hidratació administrativa desambigua special_bets amb la FK directa exacta", async () => {
+  const observed = {};
+  const client = {
+    from(table) {
+      observed.table = table;
+      return {
+        select(columns) { observed.columns = columns; return this; },
+        async order(column, options) {
+          observed.order = { column, options };
+          return { data: [], error: null };
+        }
+      };
+    }
+  };
+  const repository = new SupabaseRepository(client);
+  assert.deepEqual(await repository.listAdminPools(), []);
+  assert.deepEqual(observed, {
+    table: "pools",
+    columns: "*, special_bets!special_bets_pool_id_fkey(*)",
+    order: { column: "created_at", options: { ascending: false } }
+  });
+  assert.equal(ADMIN_POOL_SELECT, observed.columns);
+});
+
+test("cap loader Supabase conserva l'embed ambigu i tots els loaders admin comparteixen listAdminPools", () => {
+  const source = readFileSync(new URL("../src/repository.js", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /special_bets\(\*\)/);
+  assert.equal((source.match(/special_bets!special_bets_pool_id_fkey\(\*\)/g) || []).length, 1);
+  assert.match(source, /async listPools[\s\S]*?if \(await this\.isAdmin\(\)\) return this\.listAdminPools\(\)/);
+  assert.match(source, /async getPool[\s\S]*?await this\.listAdminPools\(\)/);
+  assert.match(source, /async getAdminPoolState[\s\S]*?await this\.listAdminPools\(\)/);
+  assert.match(source, /async getPublicPoolState[\s\S]*?rpc\("get_public_pool_state"/);
 });
 
 test("DemoRepository conserva els identificadors pool- exclusivament en mode demo", async () => {

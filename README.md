@@ -89,6 +89,8 @@ El frontend local queda restringit explícitament a `porra-live-beta` (`vczrkals
 
 En mode Supabase, les porres noves s’insereixen sense `id` perquè PostgreSQL generi l’UUID natiu; el frontend adopta exclusivament l’UUID retornat. Els identificadors locals amb prefix `pool-` es generen i s’accepten només dins de `DemoRepository`, i totes les operacions administratives Supabase validen els UUID abans de fer cap crida remota.
 
+La hidratació administrativa de porres especifica explícitament `special_bets_pool_id_fkey` en l’embed PostgREST. Això conserva totes les apostes especials i evita l’ambigüitat amb altres relacions entre `pools` i `special_bets`; llistat, edició, historial, apostes, directe i premis comparteixen aquesta única càrrega.
+
 1. Crea un projecte Supabase.
 2. Valida totes les migracions de `supabase/migrations/` en una base local descartable i aplica-les després amb `supabase db push`.
 3. Crea l’únic compte administrador a Supabase Auth.

@@ -10,6 +10,7 @@ import {
 import { participationState } from "./public-experience.js";
 
 export const BETA_SUPABASE_URL = "https://vczrkalsqdzwitpqwdwc.supabase.co";
+export const ADMIN_POOL_SELECT = "*, special_bets!special_bets_pool_id_fkey(*)";
 
 const STORAGE_KEY = "porra-live-demo-v1";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -317,7 +318,7 @@ export class SupabaseRepository {
   }
 
   async listAdminPools() {
-    const { data, error } = await this.client.from("pools").select("*, special_bets(*)").order("created_at", { ascending: false });
+    const { data, error } = await this.client.from("pools").select(ADMIN_POOL_SELECT).order("created_at", { ascending: false });
     if (error) throw error;
     return data.map(row => {
       const pool = this.mapPool(row);
