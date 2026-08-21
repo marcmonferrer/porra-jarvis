@@ -178,6 +178,7 @@ dd { margin: 0; font-weight: 800; }
 .admin-hero { display: flex; align-items: end; justify-content: space-between; gap: 24px; padding: 30px; color: #fff; border-radius: 26px 26px 0 0; background: var(--navy); }
 .admin-hero h1 { margin: 6px 0; font-size: clamp(2rem, 4vw, 3.2rem); }
 .admin-hero p { margin: 0; color: #b9c6d9; }
+.admin-hero__actions { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
 .admin-session { padding: 8px 12px; border-radius: 999px; color: #ffe9f2; background: rgba(255,47,134,.2); font-size: .8rem; font-weight: 800; }
 .admin-tabs { display: grid; grid-template-columns: repeat(6, 1fr); margin-bottom: 18px; overflow: hidden; border-radius: 0 0 18px 18px; background: #102647; }
 .admin-tabs button { padding: 15px 8px; border: 0; color: #abbad0; background: transparent; font-weight: 800; }
@@ -322,6 +323,7 @@ td:last-child { display: flex; gap: 6px; }
   .action-row .demo-reset { width: 100%; margin-left: 0; }
   .history-metrics { grid-template-columns: 1fr; }
   .review-check, .admin-hero { align-items: stretch; flex-direction: column; }
+  .admin-hero__actions { align-items: stretch; flex-direction: column; }
   .tracking-entry form { display: grid; }
   .private-link { grid-template-columns: 1fr; }
   .invitation-form, .invitation-row { align-items: stretch; flex-direction: column; }
