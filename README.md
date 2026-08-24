@@ -2,7 +2,7 @@
 
 Porra Live és una aplicació reutilitzable per crear, publicar i gestionar porres de diferents partits. L’administrador configura cada edició i els participants hi juguen sense registrar-se.
 
-La versió actual inclou un mode demo local complet i deixa preparat el backend compartit amb Supabase. Encara no s’ha desplegat aquesta versió.
+La versió actual inclou un mode demo local complet i un backend compartit amb Supabase. La prèvia automatitzada d’aquesta branca encara no s’ha desplegat.
 
 ## Funcionalitats
 
@@ -14,6 +14,7 @@ La versió actual inclou un mode demo local complet i deixa preparat el backend 
 - Publicar, tancar i reobrir participacions.
 - Confirmar pagaments, alliberar reserves i corregir noms o apostes.
 - Actualitzar manualment el marcador, la fase, el minut, el descans, el resultat final i els especials.
+- Carregar manualment una prèvia automàtica opcional i reutilitzar-ne la darrera instantània segura.
 - Revisar i publicar premis definitius.
 - Consultar l’historial de porres.
 
@@ -37,9 +38,11 @@ Porra Live continua sent un frontend estàtic i responsive, sense procés de com
 - `social-card-porra-live.png`: previsualització social de la nova identitat.
 - `src/core.js`: regles de negoci, capacitat i motor de premis.
 - `src/repository.js`: adaptadors demo i Supabase, amb `supabase-js` fixat a `2.111.0`.
+- `src/match-preview.js`: presentació accessible, fixture demo i control de càrrega/cooldown de la prèvia.
 - `src/app.js`: fluxos i interfície.
 - `supabase/migrations/`: esquema versionat, funcions transaccionals i RLS.
-- `supabase/functions/sync-live-score/`: integració opcional amb API-Football.
+- `supabase/functions/refresh-match-preview/`: prèvia sota demanda amb JWT, autorització administrativa i API-Football.
+- `supabase/functions/sync-live-score/`: referència antiga desactivada; no forma part del flux de prèvia.
 - `tests/`: proves del motor i de les proteccions de dades.
 
 `app.js`, `demo.js` i `supabase/live-match.sql` es conserven només com a referència del prototip anterior i ja no són carregats per `index.html`.
@@ -124,7 +127,7 @@ Les instruccions de pagament són privades: només es retornen després de reser
 
 Les migracions antiabús invite-only `20260811102102_add_pool_invitations.sql` i `20260811104810_fix_pool_invitation_listing.sql` estan aplicades una sola vegada a `porra-live-beta`; la segona repara additivament el `pg_catalog.coalesce` històric sense modificar la migració aplicada.
 
-La matriu remota completa està validada amb PostgreSQL real: permisos admin/no-admin, tokens i hashes, errors uniformes, tracking privat, rollback, consum únic i les concurrències d’invitació, revocació i última plaça. Els advisors no mostren regressions i la neteja final confirma zero comptes o dades sintètiques residuals. El frontend local ja està integrat exclusivament amb el backend invite-only de la beta; no s’ha desplegat. Turnstile i el rate limit continuen fora de l’abast actual.
+La matriu remota completa està validada amb PostgreSQL real: permisos admin/no-admin, tokens i hashes, errors uniformes, tracking privat, rollback, consum únic i les concurrències d’invitació, revocació i última plaça. Els advisors no mostren regressions i la neteja final confirma zero comptes o dades sintètiques residuals. El frontend invite-only ja està integrat amb el backend de la beta; la prèvia automatitzada continua exclusivament local i no s’ha desplegat. Turnstile i el rate limit continuen fora de l’abast actual.
 
 ### Flux d’invitació del frontend
 
@@ -166,11 +169,15 @@ Redistribució:
 
 Els càlculs es fan en cèntims. Les restes es distribueixen amb el mètode de la resta més gran i un ordre estable: descans, final i especials. Dins d’una franja, els cèntims sobrants s’assignen per identificador d’aposta ordenat. La suma dels premis sempre coincideix exactament amb el pot.
 
-## API-Football
+## Prèvia automàtica amb API-Football
 
-El control manual funciona completament sense API externa.
+La V1 implementada localment consulta API-Football només quan un administrador autenticat prem **Carregar/Actualitzar prèvia**. Les visites públiques i els esdeveniments Realtime no fan crides al proveïdor: només llegeixen la darrera instantània compacta desada a la porra. Una fallada, un timeout o un límit 429 conserva la instantània anterior i no bloqueja reserves, tracking, directe ni premis.
 
-La funció `sync-live-score` es conserva com a referència opcional, però API-Football queda completament desactivada per a la beta: no es desplega la funció, no hi ha cap cron i no es configuren els seus secrets.
+La funció `refresh-match-preview` exigeix JWT vàlid, verifica `admin_profiles`, treballa amb el client públic i RLS —sense `service_role`—, imposa 45 segons de cooldown, 8 segons de timeout per petició i un màxim de 7 consultes. `API_FOOTBALL_KEY` és un secret exclusiu del runtime de Supabase Functions; el seu valor no pot aparèixer mai al frontend ni al repositori.
+
+Aquesta branca només prepara la migració i la funció localment: no s’han aplicat, desplegat ni configurat remotament. La cobertura real de la temporada activa de La Liga s’ha de confirmar amb una clau free abans d’autoritzar el desplegament. La funció antiga `sync-live-score` continua desactivada i fora del flux.
+
+Consulta [docs/match-preview-v1.md](docs/match-preview-v1.md) per al contracte, les decisions de proveïdor, els límits i el pla d’activació.
 
 ## Desplegament
 

@@ -38,6 +38,11 @@ import {
   isTerminalReservationError
 } from "./invitations.js";
 import { createAdminPoolCreationFlow, resolveAdminPoolView } from "./admin-pool-creation.js";
+import {
+  adminMatchPreviewMarkup,
+  createMatchPreviewController,
+  matchPreviewMarkup
+} from "./match-preview.js";
 import { createRepository } from "./repository.js";
 
 const app = document.querySelector("#app");
@@ -58,6 +63,7 @@ let adminMatchNotice = "";
 let subscribedPoolId = null;
 let unsubscribeRealtime = null;
 const adminPoolCreation = createAdminPoolCreationFlow();
+const matchPreviewController = createMatchPreviewController();
 
 if (repository.mode !== "demo") document.querySelector("[data-mode-banner]").hidden = true;
 
@@ -270,7 +276,7 @@ async function renderPublic() {
   const selectionPool = selectedCells.length * pool.poolPerBetCents;
   const canSubmitReservation = selectedCells.length > 0 && (repository.mode === "demo" || invitation.hasToken());
   const phasePresentation = publicPhasePresentation(state.match);
-  app.innerHTML = `${hero(pool, state.match)}${halfTimeMarkup(state)}${finalSummaryMarkup(state)}${metricsMarkup(state.metrics)}
+  app.innerHTML = `${hero(pool, state.match)}${matchPreviewMarkup(pool.matchPreview, { crestUrls: { home: pool.homeImage, away: pool.awayImage } })}${halfTimeMarkup(state)}${finalSummaryMarkup(state)}${metricsMarkup(state.metrics)}
     <div class="public-layout">
       <section class="panel bet-panel">
         <div class="section-heading"><div><span>${canPlay ? "1 · Tria una o dues apostes" : "Seguiment del partit"}</span><h2>Graella de resultats i especials</h2></div><strong>${state.metrics.freePlaces} places lliures</strong></div>
@@ -453,7 +459,7 @@ async function renderAdmin() {
     <div class="admin-tabs" role="tablist">
       <button data-admin-tab="pool" class="${activeAdminTab === "pool" ? "active" : ""}">1. Porra</button><button data-admin-tab="invitations" class="${activeAdminTab === "invitations" ? "active" : ""}" ${pool ? "" : "disabled"}>2. Invitacions</button><button data-admin-tab="bets" class="${activeAdminTab === "bets" ? "active" : ""}" ${pool ? "" : "disabled"}>3. Apostes</button><button data-admin-tab="match" class="${activeAdminTab === "match" ? "active" : ""}" ${pool ? "" : "disabled"}>4. Directe</button><button data-admin-tab="prizes" class="${activeAdminTab === "prizes" ? "active" : ""}" ${pool ? "" : "disabled"}>5. Premis</button><button data-admin-tab="history" class="${activeAdminTab === "history" ? "active" : ""}">6. Historial</button>
     </div>
-    <section class="panel admin-panel" data-admin-panel="pool" ${activeAdminTab === "pool" ? "" : "hidden"}><div class="section-heading"><div><span>Configuració</span><h2>${adminPoolCreation.active ? "Crear una nova porra" : pool ? "Editar porra" : "Crear la primera porra"}</h2></div>${pool && !adminPoolCreation.active ? `<span class="status-pill status-${pool.status}">${statusLabel(pool.status)}</span>` : ""}</div>${poolForm(formPool || {}, { showCancel: adminPoolCreation.active && Boolean(pool) })}${adminPoolCreation.active ? "" : adminPoolActions(pool)}</section>
+    <section class="panel admin-panel" data-admin-panel="pool" ${activeAdminTab === "pool" ? "" : "hidden"}><div class="section-heading"><div><span>Configuració</span><h2>${adminPoolCreation.active ? "Crear una nova porra" : pool ? "Editar porra" : "Crear la primera porra"}</h2></div>${pool && !adminPoolCreation.active ? `<span class="status-pill status-${pool.status}">${statusLabel(pool.status)}</span>` : ""}</div>${poolForm(formPool || {}, { showCancel: adminPoolCreation.active && Boolean(pool) })}${adminPoolCreation.active ? "" : `${adminPoolActions(pool)}${adminMatchPreviewMarkup(pool, matchPreviewController.state())}`}</section>
     <section class="panel admin-panel" data-admin-panel="invitations" ${activeAdminTab === "invitations" ? "" : "hidden"}>${adminInvitationsMarkup(pool, invitations)}</section>
     <section class="panel admin-panel" data-admin-panel="bets" ${activeAdminTab === "bets" ? "" : "hidden"}>${state ? adminBetsMarkup(state) : ""}</section>
     <section class="panel admin-panel" data-admin-panel="match" ${activeAdminTab === "match" ? "" : "hidden"}>${state ? adminMatchMarkup(state) : ""}</section>
@@ -650,6 +656,7 @@ app.addEventListener("click", async event => {
   }
   if (event.target.closest("[data-action='new-pool']")) {
     adminPoolCreation.start({ poolId: currentPoolId, tab: activeAdminTab });
+    matchPreviewController.clearError();
     activeAdminTab = "pool";
     lastCreatedInvitation = null;
     await renderAdmin();
@@ -677,6 +684,18 @@ app.addEventListener("click", async event => {
     selectedCells = selectedCells.includes(key) ? selectedCells.filter(item => item !== key) : selectedCells.length < 2 ? [...selectedCells, key] : selectedCells;
     if (selectedCells.length === 2 && !selectedCells.includes(key)) notify("Màxim dues apostes per participant.", "error");
     await renderPublic();
+    return;
+  }
+  const refreshPreview = event.target.closest("[data-action='refresh-match-preview']");
+  if (refreshPreview) {
+    const operation = matchPreviewController.refresh(poolId => repository.refreshMatchPreview(poolId), currentPoolId);
+    await renderAdmin();
+    const result = await operation;
+    if (result.error) notify(result.error, "error");
+    else if (!result.skipped) notify("Prèvia del partit actualitzada.");
+    await renderAdmin();
+    const remaining = matchPreviewController.state().cooldownRemaining;
+    if (remaining > 0) setTimeout(() => { if (view === "admin") renderAdmin().catch(error => notify(error.message || "No s’ha pogut recarregar l’administració.", "error")); }, remaining + 50);
     return;
   }
   if (event.target.closest("[data-action='confirm-reservation']")) return confirmReservation();
@@ -728,7 +747,7 @@ app.addEventListener("click", async event => {
     await renderAdmin();
   }
   const poolButton = event.target.closest("[data-pool]");
-  if (poolButton) { adminPoolCreation.cancel(); currentPoolId = poolButton.dataset.pool; lastCreatedInvitation = null; await renderAdmin(); }
+  if (poolButton) { adminPoolCreation.cancel(); matchPreviewController.clearError(); currentPoolId = poolButton.dataset.pool; lastCreatedInvitation = null; await renderAdmin(); }
   const revokeInvitation = event.target.closest("[data-revoke-invitation]");
   if (revokeInvitation) {
     await repository.revokePoolInvitation(revokeInvitation.dataset.revokeInvitation);
