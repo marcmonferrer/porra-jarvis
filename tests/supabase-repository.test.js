@@ -321,20 +321,25 @@ test("la prèvia Supabase envia només l’UUID a l’Edge Function autenticada"
 
 test("un error de refresh és segur i no modifica el snapshot carregat", async () => {
   const existing = { version: "1", fetchedAt: "2026-08-01T00:00:00Z" };
+  const message = "No s’ha pogut identificar l’equip de manera inequívoca.";
   const client = {
     functions: {
       async invoke() {
 return {
           data: null,
           error: {
-            context: new Response(JSON.stringify({ message: "El proveïdor ha limitat temporalment les consultes." }), { status: 429 })
+            context: new Response(JSON.stringify({
+              error: "team_not_found",
+              message,
+              diagnostic: { side: "home", errorCode: "team_not_found", candidateCount: 0 }
+            }), { status: 502 })
           }
         };
       }
     }
   };
   const repository = new SupabaseRepository(client);
-  await assert.rejects(() => repository.refreshMatchPreview(POOL_ID), /limitat temporalment/);
+  await assert.rejects(() => repository.refreshMatchPreview(POOL_ID), error => error.message === message);
   assert.deepEqual(existing, { version: "1", fetchedAt: "2026-08-01T00:00:00Z" });
 });
 

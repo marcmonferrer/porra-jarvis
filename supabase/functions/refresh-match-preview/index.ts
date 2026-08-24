@@ -1,7 +1,9 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.111.0";
 import {
   PreviewProviderError,
-  createApiFootballProvider
+  createApiFootballProvider,
+  previewProviderErrorBody,
+  teamResolutionWarning
 } from "../_shared/api-football-preview.js";
 
 const corsHeaders = {
@@ -21,9 +23,12 @@ function json(status: number, body: Record<string, unknown>) {
   });
 }
 
-function publicError(error: unknown) {
+function publicError(error: unknown, diagnosticAllowed = false) {
   if (error instanceof PreviewProviderError) {
-    return json(error.status, { error: error.code, message: error.message });
+    const body = previewProviderErrorBody(error, diagnosticAllowed);
+    const warning = teamResolutionWarning(body.diagnostic);
+    if (warning) console.warn(warning);
+    return json(error.status, body);
   }
   return json(500, { error: "preview_failed", message: "No s’ha pogut actualitzar la prèvia del partit." });
 }
@@ -32,6 +37,7 @@ Deno.serve(async request => {
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
   if (request.method !== "POST") return json(405, { error: "method_not_allowed", message: "Mètode no admès." });
 
+  let adminAuthorized = false;
   try {
     const authorization = request.headers.get("Authorization") || "";
     if (!authorization.startsWith("Bearer ") || authorization.length > 8192) {
@@ -63,6 +69,7 @@ Deno.serve(async request => {
       .eq("user_id", authData.user.id)
       .maybeSingle();
     if (adminError || !admin) return json(403, { error: "forbidden", message: "Aquesta operació requereix permisos d’administració." });
+    adminAuthorized = true;
 
     const cooldownKey = `${authData.user.id}:${poolId}`;
     const lastRefresh = recentRefreshes.get(cooldownKey) || 0;
@@ -95,6 +102,6 @@ Deno.serve(async request => {
 
     return json(200, { matchPreview: updated.match_preview, warnings: matchPreview.warnings });
   } catch (error) {
-    return publicError(error);
+    return publicError(error, adminAuthorized);
   }
 });

@@ -5,10 +5,12 @@ import {
   buildMatchPreview,
   createApiFootballProvider,
   normalizeTeamIdentity,
+  previewProviderErrorBody,
   resolveFixture,
   resolveTeam,
   standingForTeam,
-  teamSearchTerm
+  teamSearchTerm,
+  teamResolutionWarning
 } from "../supabase/functions/_shared/api-football-preview.js";
 
 const kickoff = "2026-08-30T19:00:00.000Z";
@@ -69,14 +71,12 @@ test("normalitza variants habituals però exigeix una coincidència única", () 
   assert.equal(teamSearchTerm("FC Barcelona"), "barcelona");
   assert.equal(teamSearchTerm("Athletic Club"), "athletic club");
   assert.throws(() => teamSearchTerm("FC"), error => error.code === "invalid_team" && error.status === 400);
-  assert.equal(resolveTeam(payload([{ team: { id: 10, name: "FC Barcelona" } }]), "Barcelona").id, 10);
-  assert.equal(resolveTeam(payload([{ team: { id: 20, name: "Athletic Club" } }]), "Athletic Club").id, 20);
-  assert.throws(() => resolveTeam(payload([]), "Athletic Club"), error => error.code === "team_not_found");
-  assert.throws(() => resolveTeam(payload([{ team: { id: 10, name: "Club A" } }, { team: { id: 11, name: "Club A FC" } }]), "Club A"), error => error.code === "team_ambiguous");
+  assert.equal(resolveTeam(payload([{ team: { id: 10, name: "FC Barcelona" } }]), "Barcelona", "home").id, 10);
+  assert.equal(resolveTeam(payload([{ team: { id: 20, name: "Athletic Club" } }]), "Athletic Club", "away").id, 20);
 });
 
-test("resolució d’equip fallida no consulta fixtures ni endevina candidats", async () => {
-  const run = async ({ home, away, expectedCode }) => {
+test("resolució d’equip fallida conserva costat i cardinalitat sense consultar fixtures", async () => {
+  const run = async ({ home, away, expectedDiagnostic }) => {
     const calls = [];
     const provider = createApiFootballProvider({
       apiKey: "test-only-key",
@@ -88,7 +88,12 @@ test("resolució d’equip fallida no consulta fixtures ni endevina candidats", 
     });
     await assert.rejects(
       () => provider.fetchPreview({ homeTeam: "FC Barcelona", awayTeam: "Athletic Club", matchAt: kickoff }),
-      error => error.code === expectedCode
+      error => {
+        assert.equal(error.code, expectedDiagnostic.errorCode);
+        assert.equal(error.message, "No s’ha pogut identificar l’equip de manera inequívoca.");
+        assert.deepEqual(error.diagnostic, expectedDiagnostic);
+        return true;
+      }
     );
     assert.equal(calls.length, 2);
     assert.ok(calls.every(url => new URL(url).pathname === "/teams"));
@@ -97,13 +102,49 @@ test("resolució d’equip fallida no consulta fixtures ni endevina candidats", 
   await run({
     home: [],
     away: [{ team: { id: 20, name: "Athletic Club" } }],
-    expectedCode: "team_not_found"
+    expectedDiagnostic: { side: "home", errorCode: "team_not_found", candidateCount: 0 }
+  });
+  await run({
+    home: [{ team: { id: 10, name: "Barcelona" } }, { team: { id: 11, name: "FC Barcelona" } }],
+    away: [{ team: { id: 20, name: "Athletic Club" } }],
+    expectedDiagnostic: { side: "home", errorCode: "team_ambiguous", candidateCount: 2 }
+  });
+  await run({
+    home: [{ team: { id: 10, name: "Barcelona" } }],
+    away: [],
+    expectedDiagnostic: { side: "away", errorCode: "team_not_found", candidateCount: 0 }
   });
   await run({
     home: [{ team: { id: 10, name: "Barcelona" } }],
     away: [{ team: { id: 20, name: "Athletic Club" } }, { team: { id: 21, name: "Athletic Club FC" } }],
-    expectedCode: "team_ambiguous"
+    expectedDiagnostic: { side: "away", errorCode: "team_ambiguous", candidateCount: 2 }
   });
+});
+
+test("la resposta admin i l’avís només contenen diagnòstic sanititzat", () => {
+  const message = "No s’ha pogut identificar l’equip de manera inequívoca.";
+  const error = new PreviewProviderError("team_ambiguous", message, 502, {
+    side: "away",
+    errorCode: "team_ambiguous",
+    candidateCount: 3,
+    teamName: "Athletic Club",
+    searchTerm: "athletic club",
+    providerTeamId: 20,
+    apiKey: "test-only-key",
+    jwt: "test-only-jwt",
+    userId: "test-only-user"
+  });
+  const diagnostic = { side: "away", errorCode: "team_ambiguous", candidateCount: 3 };
+  assert.deepEqual(error.diagnostic, diagnostic);
+  assert.deepEqual(previewProviderErrorBody(error, true), {
+    error: "team_ambiguous",
+    message,
+    diagnostic
+  });
+  assert.deepEqual(previewProviderErrorBody(error, false), { error: "team_ambiguous", message });
+  assert.equal(teamResolutionWarning(error.diagnostic), JSON.stringify(diagnostic));
+  const serialized = JSON.stringify(previewProviderErrorBody(error, true)) + teamResolutionWarning(error.diagnostic);
+  assert.doesNotMatch(serialized, /Athletic Club|athletic club|providerTeamId|test-only-key|test-only-jwt|test-only-user/);
 });
 
 test("termes de descoberta invàlids fallen abans de qualsevol petició", async () => {

@@ -5,14 +5,39 @@ export const PROVIDER_TIMEOUT_MS = 8_000;
 
 const COMPLETE_FIXTURE_STATUSES = new Set(["FT", "AET", "PEN"]);
 const IGNORED_TEAM_WORDS = new Set(["fc", "cf"]);
+const TEAM_RESOLUTION_SIDES = new Set(["home", "away"]);
+const TEAM_RESOLUTION_CODES = new Set(["team_not_found", "team_ambiguous"]);
+
+function sanitizedTeamResolutionDiagnostic(value) {
+  if (!value || typeof value !== "object") return null;
+  const { side, errorCode, candidateCount } = value;
+  const validCount = Number.isSafeInteger(candidateCount)
+    && (errorCode === "team_not_found" ? candidateCount === 0 : candidateCount > 1);
+  if (!TEAM_RESOLUTION_SIDES.has(side) || !TEAM_RESOLUTION_CODES.has(errorCode) || !validCount) return null;
+  return Object.freeze({ side, errorCode, candidateCount });
+}
 
 export class PreviewProviderError extends Error {
-  constructor(code, message, status = 502) {
+  constructor(code, message, status = 502, diagnostic = null) {
     super(message);
     this.name = "PreviewProviderError";
     this.code = code;
     this.status = status;
+    const safeDiagnostic = sanitizedTeamResolutionDiagnostic(diagnostic);
+    if (safeDiagnostic) this.diagnostic = safeDiagnostic;
   }
+}
+
+export function previewProviderErrorBody(error, includeDiagnostic = false) {
+  const body = { error: error.code, message: error.message };
+  const diagnostic = includeDiagnostic ? sanitizedTeamResolutionDiagnostic(error.diagnostic) : null;
+  if (diagnostic) body.diagnostic = diagnostic;
+  return body;
+}
+
+export function teamResolutionWarning(diagnostic) {
+  const safeDiagnostic = sanitizedTeamResolutionDiagnostic(diagnostic);
+  return safeDiagnostic ? JSON.stringify(safeDiagnostic) : null;
 }
 
 export function normalizeTeamIdentity(value) {
@@ -44,15 +69,18 @@ function responseItems(payload) {
   return payload.response;
 }
 
-export function resolveTeam(payload, expectedName) {
+export function resolveTeam(payload, expectedName, side) {
   const expected = normalizeTeamIdentity(expectedName);
   const matches = responseItems(payload)
     .map(item => item?.team)
     .filter(team => Number.isInteger(team?.id) && normalizeTeamIdentity(team.name) === expected);
   if (matches.length !== 1) {
+    const errorCode = matches.length ? "team_ambiguous" : "team_not_found";
     throw new PreviewProviderError(
-      matches.length ? "team_ambiguous" : "team_not_found",
-      "No s’ha pogut identificar l’equip de manera inequívoca."
+      errorCode,
+      "No s’ha pogut identificar l’equip de manera inequívoca.",
+      502,
+      { side, errorCode, candidateCount: matches.length }
     );
   }
   return matches[0];
@@ -243,8 +271,8 @@ export function createApiFootballProvider({ apiKey, fetchImpl = globalThis.fetch
         request("/teams", { search: homeSearch }),
         request("/teams", { search: awaySearch })
       ]);
-      const homeTeam = resolveTeam(homePayload, pool.homeTeam);
-      const awayTeam = resolveTeam(awayPayload, pool.awayTeam);
+      const homeTeam = resolveTeam(homePayload, pool.homeTeam, "home");
+      const awayTeam = resolveTeam(awayPayload, pool.awayTeam, "away");
       if (homeTeam.id === awayTeam.id) throw new PreviewProviderError("invalid_pool", "Els dos equips no poden ser el mateix.", 400);
       const fixturePayload = await request("/fixtures", {
         team: homeTeam.id,

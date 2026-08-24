@@ -57,10 +57,16 @@ test("l’Edge Function exigeix JWT i administrador abans del proveïdor i escri
   const poolAt = edge.indexOf('.from("pools")');
   const providerAt = edge.indexOf("const provider = createApiFootballProvider");
   const updateAt = edge.lastIndexOf('.from("pools")');
-  assert.ok(authAt > 0 && authAt < adminAt && adminAt < poolAt && poolAt < providerAt && providerAt < updateAt);
+  const authorizedAt = edge.indexOf("adminAuthorized = true");
+  assert.ok(authAt > 0 && authAt < adminAt && adminAt < authorizedAt && authorizedAt < poolAt && poolAt < providerAt && providerAt < updateAt);
   assert.match(edge, /SUPABASE_ANON_KEY/);
   assert.match(edge, /rawBody\.length > 1024/);
-  assert.doesNotMatch(edge, /service_role|SERVICE_ROLE|SYNC_SECRET|console\.(log|error|warn)|user_metadata|app_metadata/);
+  assert.doesNotMatch(edge, /service_role|SERVICE_ROLE|SYNC_SECRET|console\.(log|error)|user_metadata|app_metadata/);
+  assert.equal((edge.match(/console\.warn\(warning\)/g) || []).length, 1);
+  assert.match(edge, /previewProviderErrorBody\(error, diagnosticAllowed\)/);
+  assert.match(edge, /publicError\(error, adminAuthorized\)/);
+  assert.match(provider, /return Object\.freeze\(\{ side, errorCode, candidateCount \}\)/);
+  assert.doesNotMatch(provider, /JSON\.stringify\((?:error|payload|pool|homePayload|awayPayload)\)/);
   assert.match(provider, /response\.status === 429/);
   assert.match(provider, /MAX_PROVIDER_CALLS = 7/);
   assert.match(provider, /PROVIDER_TIMEOUT_MS = 8_000/);
