@@ -66,6 +66,11 @@ test("l’Edge Function exigeix JWT i administrador abans del proveïdor i escri
   assert.match(edge, /previewProviderErrorBody\(error, diagnosticAllowed\)/);
   assert.match(edge, /publicError\(error, adminAuthorized\)/);
   assert.match(provider, /return Object\.freeze\(\{ side, errorCode, candidateCount \}\)/);
+  assert.match(provider, /return Object\.freeze\(\{ stage, errorCode, candidateCount \}\)/);
+  assert.doesNotMatch(provider, /request\("\/teams"/);
+  assert.match(provider, /request\("\/fixtures", \{\s*date: kickoff\.toISOString\(\)\.slice\(0, 10\),\s*timezone: "UTC"\s*\}\)/);
+  const snapshotBuilder = provider.slice(provider.indexOf("export function buildMatchPreview"), provider.indexOf("function hasProviderErrors"));
+  assert.doesNotMatch(snapshotBuilder, /providerFixtureId|competitionId|providerTeamId|providerPlayerId/);
   assert.doesNotMatch(provider, /JSON\.stringify\((?:error|payload|pool|homePayload|awayPayload)\)/);
   assert.match(provider, /response\.status === 429/);
   assert.match(provider, /MAX_PROVIDER_CALLS = 7/);

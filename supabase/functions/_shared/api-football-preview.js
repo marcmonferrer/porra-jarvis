@@ -2,19 +2,31 @@ export const API_FOOTBALL_BASE_URL = "https://v3.football.api-sports.io";
 export const MATCH_PREVIEW_VERSION = "1";
 export const MAX_PROVIDER_CALLS = 7;
 export const PROVIDER_TIMEOUT_MS = 8_000;
+export const FIXTURE_KICKOFF_PRECISION_MS = 60_000;
 
 const COMPLETE_FIXTURE_STATUSES = new Set(["FT", "AET", "PEN"]);
 const IGNORED_TEAM_WORDS = new Set(["fc", "cf"]);
 const TEAM_RESOLUTION_SIDES = new Set(["home", "away"]);
 const TEAM_RESOLUTION_CODES = new Set(["team_not_found", "team_ambiguous"]);
+const FIXTURE_RESOLUTION_CODES = new Set(["fixture_not_found", "fixture_ambiguous"]);
 
-function sanitizedTeamResolutionDiagnostic(value) {
+function validCandidateCount(errorCode, candidateCount) {
+  return typeof errorCode === "string"
+    && Number.isSafeInteger(candidateCount)
+    && (errorCode.endsWith("_not_found") ? candidateCount === 0 : candidateCount > 1);
+}
+
+function sanitizedResolutionDiagnostic(value) {
   if (!value || typeof value !== "object") return null;
-  const { side, errorCode, candidateCount } = value;
-  const validCount = Number.isSafeInteger(candidateCount)
-    && (errorCode === "team_not_found" ? candidateCount === 0 : candidateCount > 1);
-  if (!TEAM_RESOLUTION_SIDES.has(side) || !TEAM_RESOLUTION_CODES.has(errorCode) || !validCount) return null;
-  return Object.freeze({ side, errorCode, candidateCount });
+  const { side, stage, errorCode, candidateCount } = value;
+  if (!validCandidateCount(errorCode, candidateCount)) return null;
+  if (TEAM_RESOLUTION_SIDES.has(side) && TEAM_RESOLUTION_CODES.has(errorCode)) {
+    return Object.freeze({ side, errorCode, candidateCount });
+  }
+  if (stage === "fixture" && FIXTURE_RESOLUTION_CODES.has(errorCode)) {
+    return Object.freeze({ stage, errorCode, candidateCount });
+  }
+  return null;
 }
 
 export class PreviewProviderError extends Error {
@@ -23,20 +35,20 @@ export class PreviewProviderError extends Error {
     this.name = "PreviewProviderError";
     this.code = code;
     this.status = status;
-    const safeDiagnostic = sanitizedTeamResolutionDiagnostic(diagnostic);
+    const safeDiagnostic = sanitizedResolutionDiagnostic(diagnostic);
     if (safeDiagnostic) this.diagnostic = safeDiagnostic;
   }
 }
 
 export function previewProviderErrorBody(error, includeDiagnostic = false) {
   const body = { error: error.code, message: error.message };
-  const diagnostic = includeDiagnostic ? sanitizedTeamResolutionDiagnostic(error.diagnostic) : null;
+  const diagnostic = includeDiagnostic ? sanitizedResolutionDiagnostic(error.diagnostic) : null;
   if (diagnostic) body.diagnostic = diagnostic;
   return body;
 }
 
-export function teamResolutionWarning(diagnostic) {
-  const safeDiagnostic = sanitizedTeamResolutionDiagnostic(diagnostic);
+export function resolutionWarning(diagnostic) {
+  const safeDiagnostic = sanitizedResolutionDiagnostic(diagnostic);
   return safeDiagnostic ? JSON.stringify(safeDiagnostic) : null;
 }
 
@@ -54,7 +66,7 @@ export function normalizeTeamIdentity(value) {
     .join(" ");
 }
 
-export function teamSearchTerm(name) {
+export function requiredTeamIdentity(name) {
   const term = typeof name === "string" ? normalizeTeamIdentity(name) : "";
   if (term.length < 3) {
     throw new PreviewProviderError("invalid_team", "La porra no té noms d’equip vàlids.", 400);
@@ -69,36 +81,27 @@ function responseItems(payload) {
   return payload.response;
 }
 
-export function resolveTeam(payload, expectedName, side) {
-  const expected = normalizeTeamIdentity(expectedName);
-  const matches = responseItems(payload)
-    .map(item => item?.team)
-    .filter(team => Number.isInteger(team?.id) && normalizeTeamIdentity(team.name) === expected);
-  if (matches.length !== 1) {
-    const errorCode = matches.length ? "team_ambiguous" : "team_not_found";
-    throw new PreviewProviderError(
-      errorCode,
-      "No s’ha pogut identificar l’equip de manera inequívoca.",
-      502,
-      { side, errorCode, candidateCount: matches.length }
-    );
-  }
-  return matches[0];
-}
-
-export function resolveFixture(payload, { homeTeamId, awayTeamId, kickoffAt }) {
+export function resolveFixture(payload, { homeTeamName, awayTeamName, kickoffAt }) {
   const expectedKickoff = new Date(kickoffAt).getTime();
+  if (!Number.isFinite(expectedKickoff)) {
+    throw new PreviewProviderError("invalid_pool", "La porra no té un horari de partit vàlid.", 400);
+  }
+  const expectedHome = requiredTeamIdentity(homeTeamName);
+  const expectedAway = requiredTeamIdentity(awayTeamName);
   const candidates = responseItems(payload).filter(item => {
     const actualKickoff = new Date(item?.fixture?.date).getTime();
-    return item?.teams?.home?.id === homeTeamId
-      && item?.teams?.away?.id === awayTeamId
+    return normalizeTeamIdentity(item?.teams?.home?.name) === expectedHome
+      && normalizeTeamIdentity(item?.teams?.away?.name) === expectedAway
       && Number.isFinite(actualKickoff)
-      && Math.abs(actualKickoff - expectedKickoff) <= 30 * 60 * 1000;
+      && Math.floor(actualKickoff / FIXTURE_KICKOFF_PRECISION_MS) === Math.floor(expectedKickoff / FIXTURE_KICKOFF_PRECISION_MS);
   });
   if (candidates.length !== 1) {
+    const errorCode = candidates.length ? "fixture_ambiguous" : "fixture_not_found";
     throw new PreviewProviderError(
-      candidates.length ? "fixture_ambiguous" : "fixture_not_found",
-      "No s’ha trobat un únic partit que coincideixi amb els equips i l’horari."
+      errorCode,
+      "No s’ha trobat un únic partit que coincideixi amb els equips i l’horari.",
+      502,
+      { stage: "fixture", errorCode, candidateCount: candidates.length }
     );
   }
   return candidates[0];
@@ -168,13 +171,16 @@ export function attackingReferenceForTeam(payload, teamId) {
   if (!player) return null;
   const statistics = player.statistics.find(stat => stat?.team?.id === teamId);
   const goals = finiteNumber(statistics?.goals?.total);
-  const providerPlayerId = finiteNumber(player.player?.id);
   const name = String(player.player?.name || "").trim();
-  if (goals === null || providerPlayerId === null || !name) return null;
-  return { providerPlayerId, name, goals };
+  if (goals === null || !name) return null;
+  return { name, goals };
 }
 
 export function buildMatchPreview({ fixture, homeTeam, awayTeam, standings, recentHome, recentAway, scorers, fetchedAt, warnings = [] }) {
+  requiredNumber(fixture.fixture?.id);
+  requiredNumber(fixture.league?.id);
+  requiredNumber(homeTeam?.id);
+  requiredNumber(awayTeam?.id);
   const standingHome = standings ? standingForTeam(standings, homeTeam.id) : null;
   const standingAway = standings ? standingForTeam(standings, awayTeam.id) : null;
   const competitionName = String(fixture.league?.name || "").trim();
@@ -182,7 +188,6 @@ export function buildMatchPreview({ fixture, homeTeam, awayTeam, standings, rece
   const teamSnapshot = (team, standing, recentMatches) => {
     const attackingReference = scorers ? attackingReferenceForTeam(scorers, team.id) : null;
     return {
-      providerTeamId: requiredNumber(team.id),
       name: String(team.name),
       ...(team.logo ? { crestUrl: String(team.logo) } : {}),
       ...(standing ? {
@@ -202,8 +207,6 @@ export function buildMatchPreview({ fixture, homeTeam, awayTeam, standings, rece
   return {
     version: MATCH_PREVIEW_VERSION,
     provider: "api-football",
-    providerFixtureId: requiredNumber(fixture.fixture?.id),
-    competitionId: requiredNumber(fixture.league?.id),
     competitionName,
     season: requiredNumber(fixture.league?.season),
     fetchedAt: new Date(fetchedAt).toISOString(),
@@ -265,37 +268,38 @@ export function createApiFootballProvider({ apiKey, fetchImpl = globalThis.fetch
     async fetchPreview(pool) {
       const kickoff = new Date(pool.matchAt);
       if (!Number.isFinite(kickoff.getTime())) throw new PreviewProviderError("invalid_pool", "La porra no té un horari de partit vàlid.", 400);
-      const homeSearch = teamSearchTerm(pool.homeTeam);
-      const awaySearch = teamSearchTerm(pool.awayTeam);
-      const [homePayload, awayPayload] = await Promise.all([
-        request("/teams", { search: homeSearch }),
-        request("/teams", { search: awaySearch })
-      ]);
-      const homeTeam = resolveTeam(homePayload, pool.homeTeam, "home");
-      const awayTeam = resolveTeam(awayPayload, pool.awayTeam, "away");
-      if (homeTeam.id === awayTeam.id) throw new PreviewProviderError("invalid_pool", "Els dos equips no poden ser el mateix.", 400);
+      const homeIdentity = requiredTeamIdentity(pool.homeTeam);
+      const awayIdentity = requiredTeamIdentity(pool.awayTeam);
+      if (homeIdentity === awayIdentity) throw new PreviewProviderError("invalid_pool", "Els dos equips no poden ser el mateix.", 400);
       const fixturePayload = await request("/fixtures", {
-        team: homeTeam.id,
         date: kickoff.toISOString().slice(0, 10),
         timezone: "UTC"
       });
       const fixture = resolveFixture(fixturePayload, {
-        homeTeamId: homeTeam.id,
-        awayTeamId: awayTeam.id,
+        homeTeamName: pool.homeTeam,
+        awayTeamName: pool.awayTeam,
         kickoffAt: kickoff.toISOString()
       });
+      requiredNumber(fixture.fixture?.id);
+      const competitionId = requiredNumber(fixture.league?.id);
+      const season = requiredNumber(fixture.league?.season);
+      const homeTeam = fixture.teams?.home;
+      const awayTeam = fixture.teams?.away;
+      const homeTeamId = requiredNumber(homeTeam?.id);
+      const awayTeamId = requiredNumber(awayTeam?.id);
+      if (homeTeamId === awayTeamId) throw new PreviewProviderError("invalid_pool", "Els dos equips no poden ser el mateix.", 400);
       const warnings = [];
       const standings = await optional(
-        () => request("/standings", { league: fixture.league.id, season: fixture.league.season }),
+        () => request("/standings", { league: competitionId, season }),
         "La classificació no està disponible per a aquesta competició.",
         warnings
       );
       const [recentHomePayload, recentAwayPayload] = await Promise.all([
-        optional(() => request("/fixtures", { team: homeTeam.id, last: 10 }), "Falten els últims partits del local.", warnings),
-        optional(() => request("/fixtures", { team: awayTeam.id, last: 10 }), "Falten els últims partits del visitant.", warnings)
+        optional(() => request("/fixtures", { team: homeTeamId, last: 10 }), "Falten els últims partits del local.", warnings),
+        optional(() => request("/fixtures", { team: awayTeamId, last: 10 }), "Falten els últims partits del visitant.", warnings)
       ]);
       const scorers = await optional(
-        () => request("/players/topscorers", { league: fixture.league.id, season: fixture.league.season }),
+        () => request("/players/topscorers", { league: competitionId, season }),
         "La referència ofensiva no està disponible.",
         warnings
       );
@@ -304,8 +308,8 @@ export function createApiFootballProvider({ apiKey, fetchImpl = globalThis.fetch
         homeTeam,
         awayTeam,
         standings,
-        recentHome: recentHomePayload ? recentTeamContext(recentHomePayload, homeTeam.id, fixture.fixture.date) : [],
-        recentAway: recentAwayPayload ? recentTeamContext(recentAwayPayload, awayTeam.id, fixture.fixture.date) : [],
+        recentHome: recentHomePayload ? recentTeamContext(recentHomePayload, homeTeamId, fixture.fixture.date) : [],
+        recentAway: recentAwayPayload ? recentTeamContext(recentAwayPayload, awayTeamId, fixture.fixture.date) : [],
         scorers,
         fetchedAt: now(),
         warnings

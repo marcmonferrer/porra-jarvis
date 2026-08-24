@@ -3,7 +3,7 @@ import {
   PreviewProviderError,
   createApiFootballProvider,
   previewProviderErrorBody,
-  teamResolutionWarning
+  resolutionWarning
 } from "../_shared/api-football-preview.js";
 
 const corsHeaders = {
@@ -26,7 +26,7 @@ function json(status: number, body: Record<string, unknown>) {
 function publicError(error: unknown, diagnosticAllowed = false) {
   if (error instanceof PreviewProviderError) {
     const body = previewProviderErrorBody(error, diagnosticAllowed);
-    const warning = teamResolutionWarning(body.diagnostic);
+    const warning = resolutionWarning(body.diagnostic);
     if (warning) console.warn(warning);
     return json(error.status, body);
   }
