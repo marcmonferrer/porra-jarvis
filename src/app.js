@@ -37,6 +37,7 @@ import {
   isInvalidInvitationError,
   isTerminalReservationError
 } from "./invitations.js";
+import { createAdminPoolCreationFlow, resolveAdminPoolView } from "./admin-pool-creation.js";
 import { createRepository } from "./repository.js";
 
 const app = document.querySelector("#app");
@@ -56,6 +57,7 @@ let historySummaryPoolId = null;
 let adminMatchNotice = "";
 let subscribedPoolId = null;
 let unsubscribeRealtime = null;
+const adminPoolCreation = createAdminPoolCreationFlow();
 
 if (repository.mode !== "demo") document.querySelector("[data-mode-banner]").hidden = true;
 
@@ -348,7 +350,7 @@ async function confirmReservation() {
   }
 }
 
-function poolForm(pool = {}) {
+function poolForm(pool = {}, { showCancel = false } = {}) {
   const readOnly = pool.status === "finished";
   const specials = pool.specials || SPECIAL_CELLS.map((cellKey, index) => ({ cellKey, title: `Especial ${index + 1}`, description: "" }));
   const localDate = value => {
@@ -375,7 +377,7 @@ function poolForm(pool = {}) {
     </div>
     <fieldset><legend>Quatre apostes especials</legend><div class="special-form-grid">${specials.map((special, index) => `<div><strong>${special.cellKey}</strong><label>Nom<input required name="specialTitle${index}" value="${escapeHtml(special.title)}"></label><label>Condició<textarea name="specialDescription${index}">${escapeHtml(special.description || "")}</textarea></label></div>`).join("")}</div></fieldset>
     </fieldset>
-    ${readOnly ? `<div class="notice read-only-note"><strong>Mode només lectura</strong><p>Aquesta porra està finalitzada i no es pot modificar.</p></div>` : `<button class="button primary" type="submit">${pool.id ? "Desar canvis" : "Crear esborrany"}</button>`}
+    ${readOnly ? `<div class="notice read-only-note"><strong>Mode només lectura</strong><p>Aquesta porra està finalitzada i no es pot modificar.</p></div>` : `<div class="action-row"><button class="button primary" type="submit">${pool.id ? "Desar canvis" : "Crear esborrany"}</button>${showCancel ? `<button class="button" type="button" data-action="cancel-new-pool">Cancel·lar</button>` : ""}</div>`}
   </form>`;
 }
 
@@ -440,18 +442,18 @@ async function renderAdmin() {
     return;
   }
   const pools = await repository.listPools();
-  const pool = currentPoolId ? pools.find(item => item.id === currentPoolId) : pools[0];
-  if (pool) currentPoolId = pool.id;
+  const { selectedPool: pool, formPool } = resolveAdminPoolView(pools, currentPoolId, adminPoolCreation.active);
+  if (pool && !adminPoolCreation.active) currentPoolId = pool.id;
   const state = pool ? await repository.getPoolState(pool.id) : null;
   const [historyStates, invitations] = await Promise.all([
     Promise.all(pools.map(item => repository.getPoolState(item.id))),
     pool && repository.mode === "supabase" ? repository.listPoolInvitations(pool.id) : Promise.resolve([])
   ]);
-  app.innerHTML = `<section class="admin-hero"><div><span class="eyebrow">Panell d’administració</span><h1>Gestiona Porra Live</h1><p>Crea porres, valida pagaments i publica els premis des d’un únic lloc.</p></div><div class="admin-session">${repository.mode === "demo" ? "Sessió demo" : escapeHtml(session.user.email)}${repository.mode === "demo" ? "" : `<button data-action="admin-logout">Sortir</button>`}</div></section>
+  app.innerHTML = `<section class="admin-hero"><div><span class="eyebrow">Panell d’administració</span><h1>Gestiona Porra Live</h1><p>Crea porres, valida pagaments i publica els premis des d’un únic lloc.</p></div><div class="admin-hero__actions"><button class="button primary small" type="button" data-action="new-pool" ${adminPoolCreation.active ? "disabled" : ""}>+ Nova porra</button><div class="admin-session">${repository.mode === "demo" ? "Sessió demo" : escapeHtml(session.user.email)}${repository.mode === "demo" ? "" : `<button data-action="admin-logout">Sortir</button>`}</div></div></section>
     <div class="admin-tabs" role="tablist">
       <button data-admin-tab="pool" class="${activeAdminTab === "pool" ? "active" : ""}">1. Porra</button><button data-admin-tab="invitations" class="${activeAdminTab === "invitations" ? "active" : ""}" ${pool ? "" : "disabled"}>2. Invitacions</button><button data-admin-tab="bets" class="${activeAdminTab === "bets" ? "active" : ""}" ${pool ? "" : "disabled"}>3. Apostes</button><button data-admin-tab="match" class="${activeAdminTab === "match" ? "active" : ""}" ${pool ? "" : "disabled"}>4. Directe</button><button data-admin-tab="prizes" class="${activeAdminTab === "prizes" ? "active" : ""}" ${pool ? "" : "disabled"}>5. Premis</button><button data-admin-tab="history" class="${activeAdminTab === "history" ? "active" : ""}">6. Historial</button>
     </div>
-    <section class="panel admin-panel" data-admin-panel="pool" ${activeAdminTab === "pool" ? "" : "hidden"}><div class="section-heading"><div><span>Configuració</span><h2>${pool ? "Editar porra" : "Crear la primera porra"}</h2></div>${pool ? `<span class="status-pill status-${pool.status}">${statusLabel(pool.status)}</span>` : ""}</div>${poolForm(pool || {})}${adminPoolActions(pool)}</section>
+    <section class="panel admin-panel" data-admin-panel="pool" ${activeAdminTab === "pool" ? "" : "hidden"}><div class="section-heading"><div><span>Configuració</span><h2>${adminPoolCreation.active ? "Crear una nova porra" : pool ? "Editar porra" : "Crear la primera porra"}</h2></div>${pool && !adminPoolCreation.active ? `<span class="status-pill status-${pool.status}">${statusLabel(pool.status)}</span>` : ""}</div>${poolForm(formPool || {}, { showCancel: adminPoolCreation.active && Boolean(pool) })}${adminPoolCreation.active ? "" : adminPoolActions(pool)}</section>
     <section class="panel admin-panel" data-admin-panel="invitations" ${activeAdminTab === "invitations" ? "" : "hidden"}>${adminInvitationsMarkup(pool, invitations)}</section>
     <section class="panel admin-panel" data-admin-panel="bets" ${activeAdminTab === "bets" ? "" : "hidden"}>${state ? adminBetsMarkup(state) : ""}</section>
     <section class="panel admin-panel" data-admin-panel="match" ${activeAdminTab === "match" ? "" : "hidden"}>${state ? adminMatchMarkup(state) : ""}</section>
@@ -646,6 +648,21 @@ app.addEventListener("click", async event => {
     });
     return;
   }
+  if (event.target.closest("[data-action='new-pool']")) {
+    adminPoolCreation.start({ poolId: currentPoolId, tab: activeAdminTab });
+    activeAdminTab = "pool";
+    lastCreatedInvitation = null;
+    await renderAdmin();
+    return;
+  }
+  if (event.target.closest("[data-action='cancel-new-pool']")) {
+    if (adminPoolCreation.saving) return;
+    const previousView = adminPoolCreation.cancel();
+    currentPoolId = previousView?.poolId || currentPoolId;
+    activeAdminTab = previousView?.tab || "pool";
+    await renderAdmin();
+    return;
+  }
   const viewButton = event.target.closest("[data-view]");
   if (viewButton) {
     view = viewButton.dataset.view;
@@ -711,7 +728,7 @@ app.addEventListener("click", async event => {
     await renderAdmin();
   }
   const poolButton = event.target.closest("[data-pool]");
-  if (poolButton) { currentPoolId = poolButton.dataset.pool; lastCreatedInvitation = null; await renderAdmin(); }
+  if (poolButton) { adminPoolCreation.cancel(); currentPoolId = poolButton.dataset.pool; lastCreatedInvitation = null; await renderAdmin(); }
   const revokeInvitation = event.target.closest("[data-revoke-invitation]");
   if (revokeInvitation) {
     await repository.revokePoolInvitation(revokeInvitation.dataset.revokeInvitation);
@@ -743,7 +760,21 @@ app.addEventListener("submit", async event => {
   const form = event.target;
   try {
     if (form.dataset.form === "pool") {
-      const pool = await repository.savePool(poolData(form)); currentPoolId = pool.id; notify("Porra desada."); await renderAdmin();
+      if (adminPoolCreation.saving) return;
+      const buttons = [...form.querySelectorAll("button")];
+      buttons.forEach(button => { button.disabled = true; });
+      try {
+        const result = await adminPoolCreation.save(input => repository.savePool(input), poolData(form));
+        if (result.duplicate) return;
+        const created = !form.elements.id.value;
+        currentPoolId = result.pool.id;
+        adminPoolCreation.complete();
+        activeAdminTab = "pool";
+        notify(created ? "Nova porra creada." : "Porra desada.");
+        await renderAdmin();
+      } finally {
+        buttons.forEach(button => { if (button.isConnected) button.disabled = false; });
+      }
     }
     if (form.dataset.form === "admin-login") {
       const data = new FormData(form);
