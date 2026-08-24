@@ -29,6 +29,14 @@ export function normalizeTeamIdentity(value) {
     .join(" ");
 }
 
+export function teamSearchTerm(name) {
+  const term = typeof name === "string" ? normalizeTeamIdentity(name) : "";
+  if (term.length < 3) {
+    throw new PreviewProviderError("invalid_team", "La porra no té noms d’equip vàlids.", 400);
+  }
+  return term;
+}
+
 function responseItems(payload) {
   if (!payload || !Array.isArray(payload.response)) {
     throw new PreviewProviderError("malformed_response", "El proveïdor ha retornat una resposta no vàlida.");
@@ -229,9 +237,11 @@ export function createApiFootballProvider({ apiKey, fetchImpl = globalThis.fetch
     async fetchPreview(pool) {
       const kickoff = new Date(pool.matchAt);
       if (!Number.isFinite(kickoff.getTime())) throw new PreviewProviderError("invalid_pool", "La porra no té un horari de partit vàlid.", 400);
+      const homeSearch = teamSearchTerm(pool.homeTeam);
+      const awaySearch = teamSearchTerm(pool.awayTeam);
       const [homePayload, awayPayload] = await Promise.all([
-        request("/teams", { search: pool.homeTeam }),
-        request("/teams", { search: pool.awayTeam })
+        request("/teams", { search: homeSearch }),
+        request("/teams", { search: awaySearch })
       ]);
       const homeTeam = resolveTeam(homePayload, pool.homeTeam);
       const awayTeam = resolveTeam(awayPayload, pool.awayTeam);

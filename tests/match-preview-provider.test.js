@@ -7,7 +7,8 @@ import {
   normalizeTeamIdentity,
   resolveFixture,
   resolveTeam,
-  standingForTeam
+  standingForTeam,
+  teamSearchTerm
 } from "../supabase/functions/_shared/api-football-preview.js";
 
 const kickoff = "2026-08-30T19:00:00.000Z";
@@ -35,7 +36,7 @@ function providerFetch({ topScorersStatus = 200 } = {}) {
     calls.push({ url: url.toString(), key: options.headers["x-apisports-key"] });
     if (url.pathname === "/teams") {
       const search = url.searchParams.get("search");
-      return jsonResponse(payload([{ team: search.includes("Barcelona") ? { id: 10, name: "FC Barcelona", logo: "https://cdn.example/barca.png" } : { id: 20, name: "Real Madrid CF", logo: "https://cdn.example/madrid.png" } }]));
+      return jsonResponse(payload([{ team: search === "barcelona" ? { id: 10, name: "Barcelona", logo: "https://cdn.example/barca.png" } : { id: 20, name: "Real Madrid CF", logo: "https://cdn.example/madrid.png" } }]));
     }
     if (url.pathname === "/standings") return jsonResponse(payload([{ league: { standings: [[
       { rank: 2, points: 68, form: "WWDWL", team: { id: 10 }, all: { played: 34, goals: { for: 62, against: 29 } } },
@@ -65,8 +66,58 @@ function providerFetch({ topScorersStatus = 200 } = {}) {
 test("normalitza variants habituals però exigeix una coincidència única", () => {
   assert.equal(normalizeTeamIdentity("F.C. Barcelona"), "barcelona");
   assert.equal(normalizeTeamIdentity("Real Madrid CF"), "real madrid");
+  assert.equal(teamSearchTerm("FC Barcelona"), "barcelona");
+  assert.equal(teamSearchTerm("Athletic Club"), "athletic club");
+  assert.throws(() => teamSearchTerm("FC"), error => error.code === "invalid_team" && error.status === 400);
   assert.equal(resolveTeam(payload([{ team: { id: 10, name: "FC Barcelona" } }]), "Barcelona").id, 10);
+  assert.equal(resolveTeam(payload([{ team: { id: 20, name: "Athletic Club" } }]), "Athletic Club").id, 20);
+  assert.throws(() => resolveTeam(payload([]), "Athletic Club"), error => error.code === "team_not_found");
   assert.throws(() => resolveTeam(payload([{ team: { id: 10, name: "Club A" } }, { team: { id: 11, name: "Club A FC" } }]), "Club A"), error => error.code === "team_ambiguous");
+});
+
+test("resolució d’equip fallida no consulta fixtures ni endevina candidats", async () => {
+  const run = async ({ home, away, expectedCode }) => {
+    const calls = [];
+    const provider = createApiFootballProvider({
+      apiKey: "test-only-key",
+      fetchImpl: async url => {
+        calls.push(url.toString());
+        assert.equal(url.pathname, "/teams");
+        return jsonResponse(payload(url.searchParams.get("search") === "barcelona" ? home : away));
+      }
+    });
+    await assert.rejects(
+      () => provider.fetchPreview({ homeTeam: "FC Barcelona", awayTeam: "Athletic Club", matchAt: kickoff }),
+      error => error.code === expectedCode
+    );
+    assert.equal(calls.length, 2);
+    assert.ok(calls.every(url => new URL(url).pathname === "/teams"));
+  };
+
+  await run({
+    home: [],
+    away: [{ team: { id: 20, name: "Athletic Club" } }],
+    expectedCode: "team_not_found"
+  });
+  await run({
+    home: [{ team: { id: 10, name: "Barcelona" } }],
+    away: [{ team: { id: 20, name: "Athletic Club" } }, { team: { id: 21, name: "Athletic Club FC" } }],
+    expectedCode: "team_ambiguous"
+  });
+});
+
+test("termes de descoberta invàlids fallen abans de qualsevol petició", async () => {
+  let calls = 0;
+  const provider = createApiFootballProvider({
+    apiKey: "test-only-key",
+    fetchImpl: async () => { calls += 1; return jsonResponse(payload([])); }
+  });
+  await assert.rejects(
+    () => provider.fetchPreview({ homeTeam: "FC Barcelona", awayTeam: "CF", matchAt: kickoff }),
+    error => error.code === "invalid_team" && error.status === 400
+  );
+  assert.equal(calls, 0);
+  assert.equal(provider.callCount, 0);
 });
 
 test("la fixture requereix equips, localia i horari exactes; mai no endevina", () => {
@@ -78,9 +129,10 @@ test("la fixture requereix equips, localia i horari exactes; mai no endevina", (
 test("el proveïdor fa set crides com a màxim i desa només el snapshot compacte normalitzat", async () => {
   const mock = providerFetch();
   const provider = createApiFootballProvider({ apiKey: "test-only-key", fetchImpl: mock.fetchImpl, now: () => new Date("2026-08-24T09:00:00Z") });
-  const snapshot = await provider.fetchPreview({ homeTeam: "Barcelona", awayTeam: "Real Madrid", matchAt: kickoff });
+  const snapshot = await provider.fetchPreview({ homeTeam: "FC Barcelona", awayTeam: "Real Madrid CF", matchAt: kickoff });
   assert.equal(provider.callCount, 7);
   assert.equal(mock.calls.length, 7);
+  assert.deepEqual(mock.calls.slice(0, 2).map(call => new URL(call.url).searchParams.get("search")), ["barcelona", "real madrid"]);
   assert.ok(mock.calls.every(call => call.key === "test-only-key"));
   assert.equal(snapshot.providerFixtureId, 901);
   assert.equal(snapshot.homeTeam.providerTeamId, 10);
