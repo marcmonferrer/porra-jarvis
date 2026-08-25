@@ -9,6 +9,27 @@ const IGNORED_TEAM_WORDS = new Set(["fc", "cf"]);
 const TEAM_RESOLUTION_SIDES = new Set(["home", "away"]);
 const TEAM_RESOLUTION_CODES = new Set(["team_not_found", "team_ambiguous"]);
 const FIXTURE_RESOLUTION_CODES = new Set(["fixture_not_found", "fixture_ambiguous"]);
+const PROVIDER_ISSUES = new Set(["plan_or_season", "quota", "authentication", "invalid_request", "unknown"]);
+const PROVIDER_ERROR_CODES = new Map([
+  ["access", "plan_or_season"],
+  ["coverage", "plan_or_season"],
+  ["plan", "plan_or_season"],
+  ["season", "plan_or_season"],
+  ["requests", "quota"],
+  ["rate_limit", "quota"],
+  ["ratelimit", "quota"],
+  ["api_key", "authentication"],
+  ["apikey", "authentication"],
+  ["authentication", "authentication"],
+  ["token", "authentication"],
+  ["date", "invalid_request"],
+  ["fixture", "invalid_request"],
+  ["missing", "invalid_request"],
+  ["parameter", "invalid_request"],
+  ["parameters", "invalid_request"],
+  ["timezone", "invalid_request"]
+]);
+const PROVIDER_ISSUE_PRIORITY = ["authentication", "quota", "plan_or_season", "invalid_request"];
 
 function validCandidateCount(errorCode, candidateCount) {
   return typeof errorCode === "string"
@@ -18,7 +39,10 @@ function validCandidateCount(errorCode, candidateCount) {
 
 function sanitizedResolutionDiagnostic(value) {
   if (!value || typeof value !== "object") return null;
-  const { side, stage, errorCode, candidateCount } = value;
+  const { side, stage, errorCode, candidateCount, providerIssue } = value;
+  if (stage === "fixture_request" && errorCode === "provider_response" && PROVIDER_ISSUES.has(providerIssue)) {
+    return Object.freeze({ stage, errorCode, providerIssue });
+  }
   if (!validCandidateCount(errorCode, candidateCount)) return null;
   if (TEAM_RESOLUTION_SIDES.has(side) && TEAM_RESOLUTION_CODES.has(errorCode)) {
     return Object.freeze({ side, errorCode, candidateCount });
@@ -219,15 +243,50 @@ export function buildMatchPreview({ fixture, homeTeam, awayTeam, standings, rece
 }
 
 function hasProviderErrors(payload) {
-  if (!payload?.errors) return false;
-  return Array.isArray(payload.errors) ? payload.errors.length > 0 : Object.keys(payload.errors).length > 0;
+  return classifyProviderIssue(payload?.errors) !== null;
+}
+
+function providerErrorToken(value) {
+  if (typeof value !== "string" || value.length < 1 || value.length > 64) return null;
+  const token = value
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+  return /^[a-z_]+$/.test(token) ? token : null;
+}
+
+export function classifyProviderIssue(errors) {
+  if (errors === null || errors === undefined || errors === false) return null;
+  if (Array.isArray(errors) && errors.length === 0) return null;
+  if (!Array.isArray(errors) && typeof errors === "object" && Object.keys(errors).length === 0) return null;
+
+  const issues = new Set();
+  const inspect = (value, depth = 0) => {
+    if (depth > 2) return;
+    if (typeof value === "string") {
+      const issue = PROVIDER_ERROR_CODES.get(providerErrorToken(value));
+      if (issue) issues.add(issue);
+      return;
+    }
+    if (!value || typeof value !== "object") return;
+    const entries = Object.entries(value).slice(0, 32);
+    for (const [key, nested] of entries) {
+      const token = providerErrorToken(key);
+      const issue = PROVIDER_ERROR_CODES.get(token);
+      if (issue) issues.add(issue);
+      if (Array.isArray(value) || ["code", "type", "category"].includes(token)) inspect(nested, depth + 1);
+    }
+  };
+  inspect(errors);
+  return PROVIDER_ISSUE_PRIORITY.find(issue => issues.has(issue)) || "unknown";
 }
 
 export function createApiFootballProvider({ apiKey, fetchImpl = globalThis.fetch, now = () => new Date(), timeoutMs = PROVIDER_TIMEOUT_MS, maxCalls = MAX_PROVIDER_CALLS } = {}) {
   if (!apiKey) throw new PreviewProviderError("missing_key", "La prèvia automàtica no està configurada.", 503);
   let calls = 0;
 
-  async function request(path, params) {
+  async function request(path, params, diagnosticStage = null) {
     calls += 1;
     if (calls > maxCalls) throw new PreviewProviderError("call_budget", "S’ha assolit el límit segur de consultes.", 503);
     const url = new URL(`${API_FOOTBALL_BASE_URL}${path}`);
@@ -242,7 +301,17 @@ export function createApiFootballProvider({ apiKey, fetchImpl = globalThis.fetch
       if (response.status === 429) throw new PreviewProviderError("rate_limited", "El proveïdor ha limitat temporalment les consultes.", 429);
       if (!response.ok) throw new PreviewProviderError("provider_http", "El proveïdor no està disponible temporalment.");
       const payload = await response.json();
-      if (hasProviderErrors(payload)) throw new PreviewProviderError("provider_response", "El proveïdor no ha pogut completar la consulta.");
+      if (hasProviderErrors(payload)) {
+        const providerIssue = classifyProviderIssue(payload.errors);
+        throw new PreviewProviderError(
+          "provider_response",
+          "El proveïdor no ha pogut completar la consulta.",
+          502,
+          diagnosticStage === "fixture_request"
+            ? { stage: "fixture_request", errorCode: "provider_response", providerIssue }
+            : null
+        );
+      }
       return payload;
     } catch (error) {
       if (error instanceof PreviewProviderError) throw error;
@@ -274,7 +343,7 @@ export function createApiFootballProvider({ apiKey, fetchImpl = globalThis.fetch
       const fixturePayload = await request("/fixtures", {
         date: kickoff.toISOString().slice(0, 10),
         timezone: "UTC"
-      });
+      }, "fixture_request");
       const fixture = resolveFixture(fixturePayload, {
         homeTeamName: pool.homeTeam,
         awayTeamName: pool.awayTeam,

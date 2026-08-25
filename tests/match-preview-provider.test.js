@@ -4,6 +4,7 @@ import {
   FIXTURE_KICKOFF_PRECISION_MS,
   PreviewProviderError,
   buildMatchPreview,
+  classifyProviderIssue,
   createApiFootballProvider,
   normalizeTeamIdentity,
   previewProviderErrorBody,
@@ -72,6 +73,69 @@ function providerFetch({ standingsStatus = 200, recentStatus = 200, topScorersSt
   };
   return { calls, fetchImpl };
 }
+
+test("classifica errors del proveïdor amb una allowlist defensiva", () => {
+  const cases = [
+    [{ plan: "raw plan message" }, "plan_or_season"],
+    [[{ code: "season", message: "raw season message" }], "plan_or_season"],
+    [{ rateLimit: "raw quota message" }, "quota"],
+    [["requests"], "quota"],
+    [{ token: "raw authentication message" }, "authentication"],
+    [[{ type: "api_key", detail: "raw authentication detail" }], "authentication"],
+    [{ parameters: "raw invalid request message" }, "invalid_request"],
+    [[{ category: "missing", detail: "raw invalid request detail" }], "invalid_request"],
+    [[null, 42, { message: "raw unknown message", providerFixtureId: 901 }], "unknown"],
+    ["a raw sentence mentioning plan access", "unknown"],
+    [true, "unknown"]
+  ];
+  for (const [errors, expected] of cases) assert.equal(classifyProviderIssue(errors), expected);
+  for (const errors of [null, undefined, false, [], {}]) assert.equal(classifyProviderIssue(errors), null);
+  assert.equal(classifyProviderIssue({ plan: "raw", token: "raw" }), "authentication");
+});
+
+test("els errors de la consulta inicial només exposen el diagnòstic admin sanititzat", async () => {
+  const cases = [
+    [{ plan: "Free plans do not have access to this season: 2026" }, "plan_or_season"],
+    [{ rateLimit: "Quota exhausted for key secret-provider-key" }, "quota"],
+    [[{ code: "token", message: "Invalid secret-provider-key" }], "authentication"],
+    [[{ type: "parameters", message: "Invalid date 2026-08-30" }], "invalid_request"],
+    [[null, { message: "Unknown failure for fixture 901" }], "unknown"]
+  ];
+  for (const [errors, providerIssue] of cases) {
+    let calls = 0;
+    const provider = createApiFootballProvider({
+      apiKey: "secret-provider-key",
+      fetchImpl: async () => {
+        calls += 1;
+        return jsonResponse(payload([], errors));
+      }
+    });
+    await assert.rejects(
+      () => provider.fetchPreview({ homeTeam: "FC Barcelona", awayTeam: "Athletic Club", matchAt: kickoff }),
+      error => {
+        const diagnostic = { stage: "fixture_request", errorCode: "provider_response", providerIssue };
+        assert.equal(error.code, "provider_response");
+        assert.equal(error.message, "El proveïdor no ha pogut completar la consulta.");
+        assert.deepEqual(error.diagnostic, diagnostic);
+        assert.deepEqual(previewProviderErrorBody(error, false), {
+          error: "provider_response",
+          message: "El proveïdor no ha pogut completar la consulta."
+        });
+        assert.deepEqual(previewProviderErrorBody(error, true), {
+          error: "provider_response",
+          message: "El proveïdor no ha pogut completar la consulta.",
+          diagnostic
+        });
+        assert.equal(resolutionWarning(error.diagnostic), JSON.stringify(diagnostic));
+        const exposed = JSON.stringify(previewProviderErrorBody(error, true)) + resolutionWarning(error.diagnostic);
+        assert.doesNotMatch(exposed, /Barcelona|Athletic|2026-08-30|901|secret-provider-key|message.*Invalid|providerFixtureId/);
+        return true;
+      }
+    );
+    assert.equal(calls, 1);
+    assert.equal(provider.callCount, 1);
+  }
+});
 
 test("normalitza identitats abans de resoldre la fixture", () => {
   assert.equal(normalizeTeamIdentity("F.C. Barcelona"), "barcelona");

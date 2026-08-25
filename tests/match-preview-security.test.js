@@ -67,8 +67,11 @@ test("l’Edge Function exigeix JWT i administrador abans del proveïdor i escri
   assert.match(edge, /publicError\(error, adminAuthorized\)/);
   assert.match(provider, /return Object\.freeze\(\{ side, errorCode, candidateCount \}\)/);
   assert.match(provider, /return Object\.freeze\(\{ stage, errorCode, candidateCount \}\)/);
+  assert.match(provider, /return Object\.freeze\(\{ stage, errorCode, providerIssue \}\)/);
+  assert.match(provider, /diagnosticStage === "fixture_request"/);
+  assert.match(provider, /PROVIDER_ERROR_CODES\.get\(providerErrorToken/);
   assert.doesNotMatch(provider, /request\("\/teams"/);
-  assert.match(provider, /request\("\/fixtures", \{\s*date: kickoff\.toISOString\(\)\.slice\(0, 10\),\s*timezone: "UTC"\s*\}\)/);
+  assert.match(provider, /request\("\/fixtures", \{\s*date: kickoff\.toISOString\(\)\.slice\(0, 10\),\s*timezone: "UTC"\s*\}, "fixture_request"\)/);
   const snapshotBuilder = provider.slice(provider.indexOf("export function buildMatchPreview"), provider.indexOf("function hasProviderErrors"));
   assert.doesNotMatch(snapshotBuilder, /providerFixtureId|competitionId|providerTeamId|providerPlayerId/);
   assert.doesNotMatch(provider, /JSON\.stringify\((?:error|payload|pool|homePayload|awayPayload)\)/);

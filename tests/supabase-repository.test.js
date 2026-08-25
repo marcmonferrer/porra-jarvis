@@ -321,7 +321,7 @@ test("la prèvia Supabase envia només l’UUID a l’Edge Function autenticada"
 
 test("un error de refresh és segur i no modifica el snapshot carregat", async () => {
   const existing = { version: "1", fetchedAt: "2026-08-01T00:00:00Z" };
-  const message = "No s’ha trobat un únic partit que coincideixi amb els equips i l’horari.";
+  const message = "El proveïdor no ha pogut completar la consulta.";
   const client = {
     functions: {
       async invoke() {
@@ -329,9 +329,9 @@ return {
           data: null,
           error: {
             context: new Response(JSON.stringify({
-              error: "fixture_ambiguous",
+              error: "provider_response",
               message,
-              diagnostic: { stage: "fixture", errorCode: "fixture_ambiguous", candidateCount: 2 }
+              diagnostic: { stage: "fixture_request", errorCode: "provider_response", providerIssue: "plan_or_season" }
             }), { status: 502 })
           }
         };
