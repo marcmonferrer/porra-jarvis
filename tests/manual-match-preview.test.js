@@ -108,9 +108,43 @@ test("l’editor admin és etiquetat, anunciable, navegable i no exposa l’acci
   assert.match(html, /data-action="delete-manual-match-preview"[^>]*disabled/);
   assert.match(html, /role="status" aria-live="polite"/);
   assert.doesNotMatch(html, /refresh-match-preview|API-Football|Carregar prèvia automàtica/);
+  assert.match(html, /Canvis sense desar/);
+  assert.doesNotMatch(html, /Previsualització no desada/);
 });
 
-test("el controlador evita desats duplicats i conserva el text després d’un error", async () => {
+test("un desat correcte sincronitza el snapshot i elimina l’estat pendent", async () => {
+  const controller = createManualMatchPreviewController({ now: () => new Date("2026-08-25T08:00:00.000Z") });
+  controller.load(pool);
+  controller.setText(validText);
+  const result = await controller.save((_poolId, snapshot) => snapshot, pool.id);
+  const state = controller.state();
+  assert.deepEqual(state.savedPreview, result.matchPreview);
+  assert.equal(state.draftPreview, null);
+  assert.equal(state.dirty, false);
+  assert.equal(state.status, "Prèvia desada correctament.");
+  const html = adminManualMatchPreviewMarkup(pool, state);
+  assert.match(html, /manual-match-preview/);
+  assert.doesNotMatch(html, /Canvis sense desar|Previsualització no desada/);
+});
+
+test("editar o generar una nova previsualització després del desat marca canvis sense desar", () => {
+  const savedPreview = createManualMatchPreview(validText, { now: () => new Date("2026-08-25T08:00:00.000Z") });
+  const savedPool = { ...pool, matchPreview: savedPreview };
+  const controller = createManualMatchPreviewController({ now: () => new Date("2026-08-25T09:00:00.000Z") });
+  controller.load(savedPool);
+  controller.setText(manualMatchPreviewText(savedPreview).replace("Informe de prova", "Font editada"));
+  assert.equal(controller.state().dirty, true);
+  assert.match(adminManualMatchPreviewMarkup(savedPool, controller.state()), /Canvis sense desar/);
+  controller.preview();
+  assert.equal(controller.state().dirty, true);
+  assert.ok(controller.state().draftPreview);
+  controller.setText(manualMatchPreviewText(savedPreview));
+  assert.equal(controller.state().dirty, false);
+  assert.equal(controller.state().draftPreview, null);
+  assert.doesNotMatch(adminManualMatchPreviewMarkup(savedPool, controller.state()), /Canvis sense desar/);
+});
+
+test("el controlador evita desats duplicats mentre hi ha un desat en curs", async () => {
   const controller = createManualMatchPreviewController({ now: () => new Date("2026-08-25T08:00:00.000Z") });
   controller.load(pool);
   controller.setText(validText);
@@ -129,11 +163,20 @@ test("el controlador evita desats duplicats i conserva el text després d’un e
   assert.equal((await first).matchPreview.provider, "manual");
   assert.equal((await duplicate).matchPreview.provider, "manual");
   assert.equal(controller.state().saving, false);
+});
 
-  controller.setText(validText.replace("Informe de prova", "Text que s’ha de conservar"));
+test("un desat fallit conserva el contingut i continua marcat com a no desat", async () => {
+  const controller = createManualMatchPreviewController({ now: () => new Date("2026-08-25T08:00:00.000Z") });
+  controller.load(pool);
+  const editedText = validText.replace("Informe de prova", "Text que s’ha de conservar");
+  controller.setText(editedText);
   const failed = await controller.save(() => Promise.reject(new Error("Error de desat")), pool.id);
+  const state = controller.state();
   assert.equal(failed.error, "Error de desat");
-  assert.match(controller.state().text, /Text que s’ha de conservar/);
+  assert.equal(state.text, editedText);
+  assert.equal(state.dirty, true);
+  assert.ok(state.draftPreview);
+  assert.match(adminManualMatchPreviewMarkup(pool, state), /Canvis sense desar/);
 });
 
 test("eliminació requereix confirmació i neteja només després de l’èxit", async () => {
@@ -145,6 +188,11 @@ test("eliminació requereix confirmació i neteja només després de l’èxit",
   assert.deepEqual(await controller.remove(() => { calls += 1; }, pool.id, () => true), { removed: true });
   assert.equal(calls, 1);
   assert.equal(controller.state().text, "");
+  assert.equal(controller.state().savedPreview, null);
+  assert.equal(controller.state().draftPreview, null);
+  assert.equal(controller.state().dirty, false);
+  const html = adminManualMatchPreviewMarkup(pool, controller.state());
+  assert.doesNotMatch(html, /class="match-preview manual-match-preview"|Canvis sense desar/);
 });
 
 test("DemoRepository desa, conserva en editar/publicar/recarregar i elimina la prèvia manual", async () => {

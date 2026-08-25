@@ -129,35 +129,54 @@ export function manualMatchPreviewText(preview) {
 export function createManualMatchPreviewController({ now = () => new Date() } = {}) {
   let poolId = null;
   let text = "";
+  let savedText = "";
+  let savedPreview = null;
   let draftPreview = null;
+  let dirty = false;
   let error = "";
   let status = "";
   let saving = false;
   let pending = null;
   return {
     load(pool) {
-      if ((pool?.id || null) === poolId) return;
-      poolId = pool?.id || null;
-      text = manualMatchPreviewText(pool?.matchPreview);
-      draftPreview = null;
-      error = "";
-      status = "";
-      saving = false;
-      pending = null;
+      const nextPoolId = pool?.id || null;
+      const nextSavedPreview = pool?.matchPreview || null;
+      const nextSavedText = manualMatchPreviewText(nextSavedPreview);
+      if (nextPoolId !== poolId) {
+        poolId = nextPoolId;
+        text = nextSavedText;
+        savedText = nextSavedText;
+        savedPreview = nextSavedPreview;
+        draftPreview = null;
+        dirty = false;
+        error = "";
+        status = "";
+        saving = false;
+        pending = null;
+        return;
+      }
+      savedText = nextSavedText;
+      savedPreview = nextSavedPreview;
+      if (!dirty && !saving) {
+        text = savedText;
+        draftPreview = null;
+      }
     },
     setText(value) {
       const next = String(value ?? "");
       if (next !== text) {
         text = next;
         draftPreview = null;
+        dirty = text !== savedText;
         error = "";
         status = "";
       }
     },
-    state() { return { poolId, text, draftPreview, error, status, saving }; },
+    state() { return { poolId, text, savedPreview, draftPreview, dirty, error, status, saving }; },
     preview() {
       try {
         draftPreview = createManualMatchPreview(text, { now });
+        dirty = true;
         error = "";
         status = "Previsualització preparada. Encara no s’ha desat.";
         return { matchPreview: draftPreview };
@@ -177,16 +196,21 @@ export function createManualMatchPreviewController({ now = () => new Date() } = 
         error = cause?.message || "La prèvia no és vàlida.";
         return { error };
       }
+      draftPreview = snapshot;
+      dirty = true;
       saving = true;
       error = "";
       status = "Desant la prèvia…";
       pending = Promise.resolve()
         .then(() => savePreview(targetPoolId, snapshot))
         .then(saved => {
-          draftPreview = saved || snapshot;
-          text = manualMatchPreviewText(draftPreview);
+          savedPreview = saved || snapshot;
+          savedText = manualMatchPreviewText(savedPreview);
+          text = savedText;
+          draftPreview = null;
+          dirty = false;
           status = "Prèvia desada correctament.";
-          return { matchPreview: draftPreview };
+          return { matchPreview: savedPreview };
         })
         .catch(cause => {
           error = cause?.message || "No s’ha pogut desar la prèvia.";
@@ -206,7 +230,10 @@ export function createManualMatchPreviewController({ now = () => new Date() } = 
         .then(() => removePreview(targetPoolId))
         .then(() => {
           text = "";
+          savedText = "";
+          savedPreview = null;
           draftPreview = null;
+          dirty = false;
           status = "Prèvia eliminada.";
           return { removed: true };
         })
@@ -223,8 +250,8 @@ export function createManualMatchPreviewController({ now = () => new Date() } = 
 
 export function adminManualMatchPreviewMarkup(pool, controllerState = {}) {
   if (!pool) return "";
-  const displayedPreview = controllerState.draftPreview || pool.matchPreview;
-  const hasSavedPreview = Boolean(pool.matchPreview);
+  const displayedPreview = controllerState.draftPreview || controllerState.savedPreview;
+  const hasSavedPreview = Boolean(controllerState.savedPreview);
   const saving = Boolean(controllerState.saving);
   return `<section class="admin-preview manual-preview-editor" aria-labelledby="admin-preview-title" aria-busy="${saving}">
     <div class="section-heading"><div><span>Contingut assistit</span><h2 id="admin-preview-title">Prèvia del partit</h2></div></div>
@@ -239,7 +266,7 @@ export function adminManualMatchPreviewMarkup(pool, controllerState = {}) {
     </div>
     <div class="manual-preview-announcement" role="status" aria-live="polite">${escapeHtml(controllerState.status || "")}</div>
     ${controllerState.error ? `<div class="warning" role="alert"><strong>Revisa el format</strong><p>${escapeHtml(controllerState.error)}</p></div>` : ""}
-    ${controllerState.draftPreview ? `<p class="preview-draft-label">Previsualització no desada</p>` : ""}
+    ${controllerState.dirty ? `<p class="preview-draft-label">Canvis sense desar</p>` : ""}
     ${displayedPreview ? matchPreviewMarkup(displayedPreview, {
       context: "admin",
       crestUrls: { home: pool.homeImage, away: pool.awayImage },
