@@ -1,0 +1,120 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import test from "node:test";
+
+const migration = await readFile(new URL("../supabase/migrations/20260824072852_add_match_previews.sql", import.meta.url), "utf8");
+const manualMigration = await readFile(new URL("../supabase/migrations/20260825071626_add_manual_match_previews.sql", import.meta.url), "utf8");
+const edge = await readFile(new URL("../supabase/functions/refresh-match-preview/index.ts", import.meta.url), "utf8");
+const provider = await readFile(new URL("../supabase/functions/_shared/api-football-preview.js", import.meta.url), "utf8");
+const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+const repository = await readFile(new URL("../src/repository.js", import.meta.url), "utf8");
+const config = await readFile(new URL("../supabase/config.toml", import.meta.url), "utf8");
+
+function functionBody(name) {
+  const match = migration.match(new RegExp(`create(?: or replace)? function ${name.replace(".", "\\.")}\\([^]*?\\n\\$\\$;`, "i"));
+  assert.ok(match, `No s'ha trobat ${name}`);
+  return match[0];
+}
+
+test("la migració és additiva, nullable, acotada i no crea cap superfície de taula nova", () => {
+  assert.match(migration, /alter table public\.pools\s+add column match_preview jsonb/);
+  assert.doesNotMatch(migration, /match_preview jsonb not null/i);
+  assert.match(migration, /pools_match_preview_shape/);
+  assert.match(migration, /jsonb_typeof\(match_preview -> 'homeTeam'\) is not distinct from 'object'/);
+  assert.match(migration, /pg_catalog\.pg_column_size\(match_preview\) <= 32768/);
+  assert.match(migration, /match_preview ->> 'version' is not distinct from '1'/);
+  assert.match(migration, /match_preview ->> 'provider' is not distinct from 'api-football'/);
+  assert.doesNotMatch(migration, /create table|create index|alter publication|supabase_realtime/i);
+  assert.doesNotMatch(migration, /grant (select|insert|update|delete).*anon/i);
+});
+
+test("la projecció pública reconstrueix una whitelist sense IDs del proveïdor ni dades privades", () => {
+  const publicState = functionBody("public.get_public_pool_state");
+  const sanitizer = functionBody("private.public_match_preview");
+  const team = functionBody("private.public_match_preview_team");
+  assert.match(publicState, /'matchPreview', private\.public_match_preview\(target_pool\.match_preview\)/);
+  assert.doesNotMatch(sanitizer + team, /providerFixtureId|competitionId|providerTeamId|providerPlayerId|paymentInstructions|created_by|token|hash/i);
+  assert.match(sanitizer, /when raw_preview is null/);
+  for (const field of ["competitionName", "season", "fetchedAt", "kickoffAt", "homeTeam", "awayTeam", "warnings", "source"]) {
+    assert.match(sanitizer, new RegExp(`'${field}'`));
+  }
+  assert.match(migration, /revoke execute on function private\.public_match_preview\(jsonb\)\s+from public, anon, authenticated/);
+  assert.match(migration, /revoke execute on function public\.get_public_pool_state\(text\)\s+from public, anon, authenticated/);
+  assert.match(migration, /grant execute on function public\.get_public_pool_state\(text\)\s+to anon, authenticated/);
+});
+
+test("la migracio manual amplia el contracte de manera acotada i mante els snapshots automatics", () => {
+  assert.match(manualMigration, /match_preview ->> 'provider' is not distinct from 'api-football'/);
+  assert.match(manualMigration, /private\.is_valid_manual_match_preview\(match_preview\)/);
+  assert.match(manualMigration, /pg_catalog\.jsonb_array_length\(raw_value\) between 1 and 4/);
+  assert.match(manualMigration, /pg_catalog\.char_length\(item\.value #>> '\{\}'\) not between 1 and 180/);
+  assert.match(manualMigration, /pg_catalog\.pg_column_size\(raw_preview\) <= 8192/);
+  assert.ok(manualMigration.includes("~ '^https?://[^[:space:]]+$'"));
+  assert.doesNotMatch(manualMigration, /create table|create index|alter publication|supabase_realtime/i);
+  assert.doesNotMatch(manualMigration, /grant execute[^\n]*\n\s+to anon/i);
+});
+
+test("la projeccio manual es una whitelist sense camps interns", () => {
+  assert.match(manualMigration, /when raw_preview ->> 'provider' = 'manual'/);
+  for (const field of ["version", "provider", "fetchedAt", "homeTeam", "awayTeam", "source"]) {
+    assert.match(manualMigration, new RegExp(`'${field}'`));
+  }
+  assert.match(manualMigration, /private\.public_manual_match_preview_team\(raw_preview -> 'homeTeam'\)/);
+  assert.match(manualMigration, /private\.public_manual_match_preview_team\(raw_preview -> 'awayTeam'\)/);
+  assert.doesNotMatch(manualMigration, /providerFixtureId|competitionId|providerTeamId|providerPlayerId|paymentInstructions|created_by|token_hash/i);
+  assert.match(manualMigration, /revoke execute on function private\.public_match_preview\(jsonb\)\s+from public, anon, authenticated/);
+});
+
+test("l’RPC privilegiada conserva search_path buit i relacions qualificades", () => {
+  const body = functionBody("public.get_public_pool_state");
+  assert.match(body, /security definer\s+set search_path = ''/);
+  for (const relation of ["public.pools", "public.special_bets", "public.bets", "public.participants", "public.match_states", "public.special_results"]) {
+    assert.match(body, new RegExp(relation.replace(".", "\\.")));
+  }
+  assert.doesNotMatch(body, /execute\s+format|execute\s+immediate/i);
+});
+
+test("l’Edge Function exigeix JWT i administrador abans del proveïdor i escriu amb RLS d’usuari", () => {
+  const authAt = edge.indexOf("supabase.auth.getUser()");
+  const adminAt = edge.indexOf('.from("admin_profiles")');
+  const poolAt = edge.indexOf('.from("pools")');
+  const providerAt = edge.indexOf("const provider = createApiFootballProvider");
+  const updateAt = edge.lastIndexOf('.from("pools")');
+  const authorizedAt = edge.indexOf("adminAuthorized = true");
+  assert.ok(authAt > 0 && authAt < adminAt && adminAt < authorizedAt && authorizedAt < poolAt && poolAt < providerAt && providerAt < updateAt);
+  assert.match(edge, /SUPABASE_ANON_KEY/);
+  assert.match(edge, /rawBody\.length > 1024/);
+  assert.doesNotMatch(edge, /service_role|SERVICE_ROLE|SYNC_SECRET|console\.(log|error)|user_metadata|app_metadata/);
+  assert.equal((edge.match(/console\.warn\(warning\)/g) || []).length, 1);
+  assert.match(edge, /previewProviderErrorBody\(error, diagnosticAllowed\)/);
+  assert.match(edge, /publicError\(error, adminAuthorized\)/);
+  assert.match(provider, /return Object\.freeze\(\{ side, errorCode, candidateCount \}\)/);
+  assert.match(provider, /return Object\.freeze\(\{ stage, errorCode, candidateCount \}\)/);
+  assert.match(provider, /return Object\.freeze\(\{ stage, errorCode, providerIssue \}\)/);
+  assert.match(provider, /diagnosticStage === "fixture_request"/);
+  assert.match(provider, /PROVIDER_ERROR_CODES\.get\(providerErrorToken/);
+  assert.doesNotMatch(provider, /request\("\/teams"/);
+  assert.match(provider, /request\("\/fixtures", \{\s*date: kickoff\.toISOString\(\)\.slice\(0, 10\),\s*timezone: "UTC"\s*\}, "fixture_request"\)/);
+  const snapshotBuilder = provider.slice(provider.indexOf("export function buildMatchPreview"), provider.indexOf("function hasProviderErrors"));
+  assert.doesNotMatch(snapshotBuilder, /providerFixtureId|competitionId|providerTeamId|providerPlayerId/);
+  assert.doesNotMatch(provider, /JSON\.stringify\((?:error|payload|pool|homePayload|awayPayload)\)/);
+  assert.match(provider, /response\.status === 429/);
+  assert.match(provider, /MAX_PROVIDER_CALLS = 7/);
+  assert.match(provider, /PROVIDER_TIMEOUT_MS = 8_000/);
+  assert.match(config, /\[functions\.refresh-match-preview\][^]*verify_jwt = true/);
+});
+
+test("les visites públiques només renderitzen el snapshot i mai activen el proveïdor", () => {
+  const publicBody = app.slice(app.indexOf("async function renderPublic"), app.indexOf("function liveMarkup"));
+  assert.match(publicBody, /matchPreviewMarkup\(pool\.matchPreview/);
+  assert.match(publicBody, /teamNames: \{ home: pool\.homeTeam, away: pool\.awayTeam \}/);
+  assert.doesNotMatch(app, /data-action="refresh-match-preview"/);
+  assert.doesNotMatch(publicBody, /refreshMatchPreview|functions\.invoke|API_FOOTBALL/);
+  assert.equal((repository.match(/functions\.invoke\("refresh-match-preview"/g) || []).length, 1);
+  assert.doesNotMatch(repository, /API_FOOTBALL_KEY|x-apisports-key/);
+});
+
+test("cap mòdul de navegador conté secrets o capçalera del proveïdor", () => {
+  assert.doesNotMatch(app + repository, /service_role|SUPABASE_SERVICE_ROLE_KEY|API_FOOTBALL_KEY|x-apisports-key/);
+  assert.doesNotMatch(edge, /Deno\.env\.toObject|JSON\.stringify\(error\)/);
+});

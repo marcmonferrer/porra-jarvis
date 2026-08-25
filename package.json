@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node scripts/serve.mjs",
     "test": "node --test",
-    "check": "node --check src/core.js && node --check src/admin-pool-creation.js && node --check src/demo-reset.js && node --check src/invitations.js && node --check src/public-experience.js && node --check src/repository.js && node --check src/app.js"
+    "check": "node --check src/core.js && node --check src/admin-pool-creation.js && node --check src/demo-reset.js && node --check src/invitations.js && node --check src/public-experience.js && node --check src/match-preview.js && node --check src/manual-match-preview.js && node --check supabase/functions/_shared/api-football-preview.js && node --check src/repository.js && node --check src/app.js"
   },
   "devDependencies": {
     "supabase": "2.113.0"

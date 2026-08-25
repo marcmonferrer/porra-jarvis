@@ -212,7 +212,8 @@ test("la creació Supabase omet l'id local i adopta l'UUID retornat pel backend"
   });
   const poolInsert = client.calls.find(call => call.table === "pools");
   assert.equal(poolInsert.operation, "insert");
-  assert.equal("id" in poolInsert.payload, false);
+assert.equal("id" in poolInsert.payload, false);
+  assert.equal("match_preview" in poolInsert.payload, false);
   assert.equal(saved.id, POOL_ID);
   assert.ok(client.calls.filter(call => call.table === "special_bets").every(call =>
     call.payload.every(item => item.pool_id === POOL_ID)
@@ -228,6 +229,9 @@ test("els identificadors demo no poden arribar a cap operació de SupabaseReposi
   const demoParticipantId = `participant-${PARTICIPANT_ID}`;
   const demoBetId = `bet-${BET_ONE_ID}`;
   const blockedOperations = [
+    () => repository.refreshMatchPreview(demoPoolId),
+    () => repository.saveManualMatchPreview(demoPoolId, {}),
+    () => repository.deleteManualMatchPreview(demoPoolId),
     () => repository.publishPool(demoPoolId),
     () => repository.setPoolStatus(demoPoolId, "open"),
     () => repository.createPoolInvitation(demoPoolId, "2099-01-01T00:00:00.000Z"),
@@ -300,4 +304,112 @@ test("DemoRepository conserva els identificadors pool- exclusivament en mode dem
   const repository = new DemoRepository(memory);
   const saved = await repository.savePool({ title: "Demo", price: 4, poolPerBet: 3.5, fee: 0.5 });
   assert.match(saved.id, /^pool-[0-9a-f-]+$/);
+});
+test("la prèvia Supabase envia només l’UUID a l’Edge Function autenticada", async () => {
+  const calls = [];
+  const expected = { version: "1", provider: "api-football", homeTeam: {}, awayTeam: {} };
+  const client = {
+    functions: {
+      async invoke(name, options) {
+        calls.push({ name, options });
+        return { data: { matchPreview: expected }, error: null };
+      }
+    }
+  };
+  const repository = new SupabaseRepository(client);
+  assert.deepEqual(await repository.refreshMatchPreview(POOL_ID), expected);
+  assert.deepEqual(calls, [{ name: "refresh-match-preview", options: { body: { poolId: POOL_ID } } }]);
+});
+
+test("les escriptures manuals Supabase usen UUID, match_preview i RLS de l'usuari", async () => {
+  const calls = [];
+  const snapshot = {
+    version: "1",
+    provider: "manual",
+    fetchedAt: "2026-08-25T08:00:00.000Z",
+    homeTeam: { highlights: ["Local fort"] },
+    awayTeam: { highlights: ["Visitant sòlid"] },
+    source: {}
+  };
+  const client = {
+    from(table) {
+      return {
+        update(payload) {
+          const call = { table, payload };
+          calls.push(call);
+          return {
+            eq(column, value) {
+              call.filter = { column, value };
+              return this;
+            },
+            select(columns) {
+              call.select = columns;
+              return this;
+            },
+            async single() {
+              return { data: { match_preview: payload.match_preview }, error: null };
+            },
+            then(resolve, reject) {
+              return Promise.resolve({ error: null }).then(resolve, reject);
+            }
+          };
+        }
+      };
+    }
+  };
+  const repository = new SupabaseRepository(client);
+  assert.deepEqual(await repository.saveManualMatchPreview(POOL_ID, snapshot), snapshot);
+  await repository.deleteManualMatchPreview(POOL_ID);
+  assert.deepEqual(calls, [
+    {
+      table: "pools",
+      payload: { match_preview: snapshot },
+      filter: { column: "id", value: POOL_ID },
+      select: "match_preview"
+    },
+    {
+      table: "pools",
+      payload: { match_preview: null },
+      filter: { column: "id", value: POOL_ID }
+    }
+  ]);
+});
+
+test("un error de refresh és segur i no modifica el snapshot carregat", async () => {
+  const existing = { version: "1", fetchedAt: "2026-08-01T00:00:00Z" };
+  const message = "El proveïdor no ha pogut completar la consulta.";
+  const client = {
+    functions: {
+      async invoke() {
+return {
+          data: null,
+          error: {
+            context: new Response(JSON.stringify({
+              error: "provider_response",
+              message,
+              diagnostic: { stage: "fixture_request", errorCode: "provider_response", providerIssue: "plan_or_season" }
+            }), { status: 502 })
+          }
+        };
+      }
+    }
+  };
+  const repository = new SupabaseRepository(client);
+  await assert.rejects(() => repository.refreshMatchPreview(POOL_ID), error => error.message === message);
+  assert.deepEqual(existing, { version: "1", fetchedAt: "2026-08-01T00:00:00Z" });
+});
+
+test("mapPool hidrata el snapshot administratiu sense alterar-lo", () => {
+  const snapshot = { version: "1", provider: "api-football", providerFixtureId: 901 };
+  const repository = new SupabaseRepository({});
+  const pool = repository.mapPool({
+    id: POOL_ID,
+    slug: "beta",
+    home_team: "Local",
+    away_team: "Visitant",
+    match_preview: snapshot,
+    special_bets: []
+  });
+  assert.equal(pool.id, POOL_ID);
+  assert.equal(pool.matchPreview, snapshot);
 });

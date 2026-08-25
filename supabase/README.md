@@ -1,6 +1,6 @@
 # Backend Supabase de Porra Live
 
-Les migracions versionades defineixen el backend compartit de Porra Live. Les quatre estan desplegades una sola vegada a `porra-live-beta`, l’entorn de validació aïllat. La quarta repara additivament el defecte de resolució de `coalesce` detectat a la tercera, que es conserva immutable.
+Les migracions versionades defineixen el backend compartit de Porra Live. Les cinc primeres estan aplicades a `porra-live-beta`; la sisena, que afegeix el variant manual de la prèvia, existeix només localment i continua pendent d’autorització remota.
 
 ## Estat de migracions
 
@@ -10,8 +10,10 @@ Les migracions versionades defineixen el backend compartit de Porra Live. Les qu
 | `migrations/20260810144836_add_supabase_foreign_key_indexes.sql` | `20260810144836` | Índexs de claus externes per a unions i accions referencials. |
 | `migrations/20260811102102_add_pool_invitations.sql` | `20260811102102` | Invitacions privades d’un sol ús, RPC administratives i reserva pública protegida per capacitat secreta. Conserva immutable el defecte històric `pg_catalog.coalesce`. |
 | `migrations/20260811104810_fix_pool_invitation_listing.sql` | `20260811104810` | Repara additivament `admin_list_pool_invitations(uuid)` amb `coalesce` SQL vàlid i reasserta els permisos mínims. |
+| `migrations/20260824072852_add_match_previews.sql` | `20260824072852` | Afegeix el snapshot nullable, la whitelist pública i conserva RLS, grants i Realtime. |
+| `migrations/20260825071626_add_manual_match_previews.sql` | Pendent (només local) | Admet snapshots manuals de fins a 8 KiB i amplia la whitelist pública sense trencar els snapshots automàtics. |
 
-L’historial remot està alineat amb els quatre fitxers locals. La reparació utilitza `CREATE OR REPLACE FUNCTION`, preserva el contracte i fa que la llista buida retorni correctament `[]` de tipus `jsonb`. El projecte no és encara un entorn públic: no té administrador persistent, dades de prova ni desplegament compartit. El frontend local només conté la configuració publishable de `porra-live-beta`.
+La migració automàtica ja forma part de l’historial beta. Aquesta passada crea només `20260825071626_add_manual_match_previews.sql`: no l’aplica, no modifica migracions anteriors i no toca comptes, dades ni configuració remota.
 
 ## Arquitectura demo i Supabase
 
@@ -107,9 +109,13 @@ Frontend públic:
 
 No s’ha d’enviar mai al navegador cap secret, contrasenya, `service_role` o secret key.
 
-## API-Football
+## Prèvia manual i experiment API-Football
 
-API-Football queda completament desactivada per a la beta. No hi ha cap cron actiu i no s’ha de desplegar `functions/sync-live-score` ni configurar `API_FOOTBALL_KEY`, `SYNC_SECRET` o `SUPABASE_SERVICE_ROLE_KEY`.
+La UI estàndard desa el variant manual mitjançant una actualització de `public.pools.match_preview` amb el client publishable i la sessió de l’administrador. La política `pools_admin_all` continua imposant l’autorització; no hi ha RPC privilegiada nova ni accés de taula per a anon. El `CHECK` manual limita forma, camps, longituds i mida a 8 KiB, mentre que el contracte automàtic existent de 32 KiB continua sent vàlid.
+
+`private.public_match_preview(jsonb)` separa els dos variants i només projecta els camps aprovats. Realtime continua publicant exclusivament `pool_revisions`; invitacions, tracking i instruccions de pagament no canvien.
+
+`refresh-match-preview` es conserva desplegada a beta com a experiment autenticat, però el frontend estàndard ja no conté cap acció que la invoqui. Activar el flux manual no requereix desplegar la funció, llegir secrets ni consumir peticions d’API-Football. La funció antiga `sync-live-score` també continua fora del flux.
 
 ## Control antiabús invite-only
 
@@ -137,4 +143,4 @@ La passada amb dades exclusivament sintètiques confirma:
 3. Confirmar còpia i compartició per WhatsApp, consum únic, tracking i instruccions de pagament des de navegadors separats.
 4. Repetir la validació completa abans d’un desplegament públic.
 
-El frontend local està configurat únicament amb la URL i la clau publishable de `porra-live-beta`; no s’han creat usuaris ni dades durant aquesta integració i no s’ha desplegat públicament. `finalissima-porra` queda fora d’aquest flux.
+El frontend està configurat únicament amb la URL i la clau publishable de `porra-live-beta`; durant aquesta integració de prèvia no s’han creat usuaris ni dades, i el mòdul nou no s’ha desplegat. `finalissima-porra` queda fora d’aquest flux.

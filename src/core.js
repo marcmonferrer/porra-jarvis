@@ -355,6 +355,7 @@ export function createPool(input = {}) {
     feeCents,
     carryoverCents: toCents(input.carryover ?? 0),
     paymentInstructions: String(input.paymentInstructions || "").trim(),
+    matchPreview: input.matchPreview || null,
     status: POOL_STATUSES.includes(input.status) ? input.status : "draft",
     publishedAt: input.publishedAt || null,
     createdAt: input.createdAt || new Date().toISOString(),

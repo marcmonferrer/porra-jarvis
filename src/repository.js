@@ -8,6 +8,7 @@ import {
   validateSelection
 } from "./core.js";
 import { participationState } from "./public-experience.js";
+import { createDemoMatchPreview } from "./match-preview.js";
 
 export const BETA_SUPABASE_URL = "https://vczrkalsqdzwitpqwdwc.supabase.co";
 export const ADMIN_POOL_SELECT = "*, special_bets!special_bets_pool_id_fkey(*)";
@@ -111,6 +112,33 @@ export class DemoRepository {
     }
     this.write();
     return pool;
+  }
+
+  async refreshMatchPreview(poolId) {
+    const pool = await this.getPool(poolId);
+    if (!pool) throw new Error("No s’ha trobat la porra.");
+    pool.matchPreview = createDemoMatchPreview(pool);
+    pool.updatedAt = new Date().toISOString();
+    this.write();
+    return pool.matchPreview;
+  }
+
+  async saveManualMatchPreview(poolId, matchPreview) {
+    const pool = await this.getPool(poolId);
+    if (!pool) throw new Error("No s’ha trobat la porra.");
+    pool.matchPreview = structuredClone(matchPreview);
+    pool.updatedAt = new Date().toISOString();
+    this.write();
+    return structuredClone(pool.matchPreview);
+  }
+
+  async deleteManualMatchPreview(poolId) {
+    const pool = await this.getPool(poolId);
+    if (!pool) throw new Error("No s’ha trobat la porra.");
+    pool.matchPreview = null;
+    pool.updatedAt = new Date().toISOString();
+    this.write();
+    return null;
   }
 
   async publishPool(poolId) {
@@ -350,7 +378,7 @@ export class SupabaseRepository {
       matchAt: row.match_at, closesAt: row.closes_at,
       priceCents: row.price_cents, poolPerBetCents: row.pool_per_bet_cents,
       feeCents: row.fee_cents, carryoverCents: row.carryover_cents,
-      paymentInstructions: row.payment_instructions, status: row.status,
+      paymentInstructions: row.payment_instructions, matchPreview: row.match_preview || null, status: row.status,
       publishedAt: row.published_at, createdAt: row.created_at, updatedAt: row.updated_at,
       specials: [...(row.special_bets || [])].sort((a, b) => a.sort_order - b.sort_order).map(item => ({
         id: item.id, cellKey: item.cell_key, title: item.title, description: item.description
@@ -395,6 +423,44 @@ export class SupabaseRepository {
     const specialResult = await this.client.from("special_bets").upsert(specials, { onConflict: "pool_id,cell_key" });
     if (specialResult.error) throw specialResult.error;
     return this.getPool(data.id);
+  }
+
+  async refreshMatchPreview(poolId) {
+    requireSupabaseUuid(poolId, "pool");
+    const { data, error } = await this.client.functions.invoke("refresh-match-preview", {
+      body: { poolId }
+    });
+    if (error) {
+      let message = typeof data?.message === "string" ? data.message : "";
+      if (!message && typeof error.context?.clone === "function") {
+        const payload = await error.context.clone().json().catch(() => null);
+        if (typeof payload?.message === "string") message = payload.message;
+      }
+      throw new Error(message.slice(0, 240) || "No s’ha pogut actualitzar la prèvia del partit.");
+    }
+    return data?.matchPreview || null;
+  }
+
+  async saveManualMatchPreview(poolId, matchPreview) {
+    requireSupabaseUuid(poolId, "pool");
+    const { data, error } = await this.client
+      .from("pools")
+      .update({ match_preview: matchPreview })
+      .eq("id", poolId)
+      .select("match_preview")
+      .single();
+    if (error) throw error;
+    return data?.match_preview || null;
+  }
+
+  async deleteManualMatchPreview(poolId) {
+    requireSupabaseUuid(poolId, "pool");
+    const { error } = await this.client
+      .from("pools")
+      .update({ match_preview: null })
+      .eq("id", poolId);
+    if (error) throw error;
+    return null;
   }
 
   async publishPool(poolId) {
