@@ -38,7 +38,8 @@ Porra Live continua sent un frontend estàtic i responsive, sense procés de com
 - `social-card-porra-live.png`: previsualització social de la nova identitat.
 - `src/core.js`: regles de negoci, capacitat i motor de premis.
 - `src/repository.js`: adaptadors demo i Supabase, amb `supabase-js` fixat a `2.111.0`.
-- `src/match-preview.js`: presentació accessible, fixture demo i control de càrrega/cooldown de la prèvia.
+- `src/match-preview.js`: presentació pública accessible dels snapshots automàtics i manuals.
+- `src/manual-match-preview.js`: parser, validació i estat de l’editor de prèvia assistida.
 - `src/app.js`: fluxos i interfície.
 - `supabase/migrations/`: esquema versionat, funcions transaccionals i RLS.
 - `supabase/functions/refresh-match-preview/`: prèvia sota demanda amb JWT, autorització administrativa i API-Football.
@@ -169,15 +170,15 @@ Redistribució:
 
 Els càlculs es fan en cèntims. Les restes es distribueixen amb el mètode de la resta més gran i un ordre estable: descans, final i especials. Dins d’una franja, els cèntims sobrants s’assignen per identificador d’aposta ordenat. La suma dels premis sempre coincideix exactament amb el pot.
 
-## Prèvia automàtica amb API-Football
+## Prèvia assistida del partit
 
-La V1 implementada localment consulta API-Football només quan un administrador autenticat prem **Carregar/Actualitzar prèvia**. Les visites públiques i els esdeveniments Realtime no fan crides al proveïdor: només llegeixen la darrera instantània compacta desada a la porra. Una fallada, un timeout o un límit 429 conserva la instantània anterior i no bloqueja reserves, tracking, directe ni premis.
+L’administració estàndard ofereix un únic flux manual: Marc enganxa un bloc `LOCAL / VISITANT`, el valida i previsualitza al navegador, i el desa amb la sessió autenticada i la RLS administrativa existent. La vista pública mostra una targeta compacta abans de la graella amb els noms i escuts configurats, d’un a quatre punts per equip, la font opcional i l’hora d’actualització.
 
-La funció `refresh-match-preview` exigeix JWT vàlid, verifica `admin_profiles`, treballa amb el client públic i RLS —sense `service_role`—, imposa 45 segons de cooldown, 8 segons de timeout per petició i un màxim de 7 consultes. `API_FOOTBALL_KEY` és un secret exclusiu del runtime de Supabase Functions; el seu valor no pot aparèixer mai al frontend ni al repositori.
+El text no s’interpreta com HTML. El client i PostgreSQL apliquen límits de forma i mida, la URL opcional només pot ser HTTP/HTTPS i `get_public_pool_state` reconstrueix una whitelist. Editar o publicar la porra no esborra `match_preview`.
 
-Aquesta branca només prepara la migració i la funció localment: no s’han aplicat, desplegat ni configurat remotament. La cobertura real de la temporada activa de La Liga s’ha de confirmar amb una clau free abans d’autoritzar el desplegament. La funció antiga `sync-live-score` continua desactivada i fora del flux.
+La funció `refresh-match-preview` i el seu adaptador API-Football es conserven únicament com a experiment de backend. No hi ha cap botó ni ruta estàndard que els invoqui, i el flux manual no necessita la clau del proveïdor.
 
-Consulta [docs/match-preview-v1.md](docs/match-preview-v1.md) per al contracte, les decisions de proveïdor, els límits i el pla d’activació.
+Consulta [docs/assisted-manual-match-preview.md](docs/assisted-manual-match-preview.md) per al format, el contracte de seguretat i els passos d’activació. [docs/match-preview-v1.md](docs/match-preview-v1.md) es conserva com a registre del prototip automàtic.
 
 ## Desplegament
 
@@ -189,7 +190,7 @@ El frontend es pot publicar com a web estàtica a GitHub Pages. Abans de despleg
 4. Revisa RLS i els fluxos anònims.
 5. Publica només després d’haver verificat que no hi ha dades personals ni secrets.
 
-No s’ha d’activar l’Edge Function ni API-Football per a la beta. El procés complet, la matriu de permisos i els controls previs es documenten a [supabase/README.md](supabase/README.md).
+El frontend manual només s’ha de publicar després d’aplicar i validar la migració additiva corresponent. L’Edge Function experimental no forma part d’aquesta activació. El procés i els controls previs es documenten a [supabase/README.md](supabase/README.md).
 
 ## Autor
 

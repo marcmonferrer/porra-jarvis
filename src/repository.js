@@ -123,6 +123,24 @@ export class DemoRepository {
     return pool.matchPreview;
   }
 
+  async saveManualMatchPreview(poolId, matchPreview) {
+    const pool = await this.getPool(poolId);
+    if (!pool) throw new Error("No s’ha trobat la porra.");
+    pool.matchPreview = structuredClone(matchPreview);
+    pool.updatedAt = new Date().toISOString();
+    this.write();
+    return structuredClone(pool.matchPreview);
+  }
+
+  async deleteManualMatchPreview(poolId) {
+    const pool = await this.getPool(poolId);
+    if (!pool) throw new Error("No s’ha trobat la porra.");
+    pool.matchPreview = null;
+    pool.updatedAt = new Date().toISOString();
+    this.write();
+    return null;
+  }
+
   async publishPool(poolId) {
     return this.setPoolStatus(poolId, "open", { publishedAt: new Date().toISOString() });
   }
@@ -421,6 +439,28 @@ export class SupabaseRepository {
       throw new Error(message.slice(0, 240) || "No s’ha pogut actualitzar la prèvia del partit.");
     }
     return data?.matchPreview || null;
+  }
+
+  async saveManualMatchPreview(poolId, matchPreview) {
+    requireSupabaseUuid(poolId, "pool");
+    const { data, error } = await this.client
+      .from("pools")
+      .update({ match_preview: matchPreview })
+      .eq("id", poolId)
+      .select("match_preview")
+      .single();
+    if (error) throw error;
+    return data?.match_preview || null;
+  }
+
+  async deleteManualMatchPreview(poolId) {
+    requireSupabaseUuid(poolId, "pool");
+    const { error } = await this.client
+      .from("pools")
+      .update({ match_preview: null })
+      .eq("id", poolId);
+    if (error) throw error;
+    return null;
   }
 
   async publishPool(poolId) {

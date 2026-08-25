@@ -1,4 +1,3 @@
-const REFRESH_COOLDOWN_MS = 45_000;
 const STALE_AFTER_MS = 6 * 60 * 60 * 1000;
 
 function escapeHtml(value) {
@@ -13,6 +12,15 @@ function safeImageUrl(value) {
   try {
     const url = new URL(raw);
     return url.protocol === "https:" ? url.href : "";
+  } catch {
+    return "";
+  }
+}
+
+function safeSourceUrl(value) {
+  try {
+    const url = new URL(String(value || "").trim());
+    return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password ? url.href : "";
   } catch {
     return "";
   }
@@ -47,19 +55,43 @@ function teamMarkup(team = {}, side, crestUrl = "") {
   </article>`;
 }
 
+function manualTeamMarkup(team = {}, side, teamName, crestUrl = "") {
+  const crest = safeImageUrl(crestUrl);
+  const highlights = Array.isArray(team.highlights) ? team.highlights.slice(0, 4) : [];
+  return `<article class="preview-team preview-team--${side} manual-preview-team">
+    <div class="preview-team__identity">${crest ? `<img src="${escapeHtml(crest)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : `<span class="preview-crest" aria-hidden="true">⚽</span>`}<div><span>${side === "home" ? "Local" : "Visitant"}</span><h3>${escapeHtml(teamName || (side === "home" ? "Equip local" : "Equip visitant"))}</h3></div></div>
+    <ul class="manual-preview-highlights">${highlights.map(highlight => `<li>${escapeHtml(highlight)}</li>`).join("")}</ul>
+  </article>`;
+}
+
 export function previewFreshness(preview, now = Date.now()) {
   const fetched = new Date(preview?.fetchedAt).getTime();
   if (!Number.isFinite(fetched)) return "unknown";
   return now - fetched > STALE_AFTER_MS ? "stale" : "fresh";
 }
 
-export function matchPreviewMarkup(preview, { now = Date.now(), context = "public", crestUrls = {} } = {}) {
+export function matchPreviewMarkup(preview, { now = Date.now(), context = "public", crestUrls = {}, teamNames = {} } = {}) {
   if (!preview) return "";
   const freshness = previewFreshness(preview, now);
   const warnings = Array.isArray(preview.warnings) ? preview.warnings.slice(0, 5) : [];
   const fetchedAt = Number.isFinite(new Date(preview.fetchedAt).getTime())
     ? new Intl.DateTimeFormat("ca-ES", { dateStyle: "short", timeStyle: "short" }).format(new Date(preview.fetchedAt))
     : "hora desconeguda";
+  if (preview.provider === "manual") {
+    const homeHighlights = Array.isArray(preview.homeTeam?.highlights) ? preview.homeTeam.highlights : [];
+    const awayHighlights = Array.isArray(preview.awayTeam?.highlights) ? preview.awayTeam.highlights : [];
+    if (!homeHighlights.length || !awayHighlights.length) return "";
+    const sourceUrl = safeSourceUrl(preview.source?.url);
+    const sourceLabel = String(preview.source?.label || "").trim();
+    const source = sourceUrl
+      ? `<a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer nofollow">${escapeHtml(sourceLabel || "Font consultada")}</a>`
+      : escapeHtml(sourceLabel);
+    return `<section class="panel match-preview manual-match-preview" aria-labelledby="match-preview-title" data-preview-context="${escapeHtml(context)}">
+      <div class="section-heading preview-heading"><div><span>Claus abans del partit</span><h2 id="match-preview-title">Prèvia del partit</h2></div>${fetchedAt !== "hora desconeguda" ? `<span class="preview-freshness">Actualitzada · ${escapeHtml(fetchedAt)}</span>` : ""}</div>
+      <div class="preview-teams">${manualTeamMarkup(preview.homeTeam, "home", teamNames.home, crestUrls.home)}<span class="preview-versus" aria-hidden="true">VS</span>${manualTeamMarkup(preview.awayTeam, "away", teamNames.away, crestUrls.away)}</div>
+      ${source ? `<p class="preview-source">Font: ${source}</p>` : ""}
+    </section>`;
+  }
   return `<section class="panel match-preview ${freshness === "stale" ? "is-stale" : ""}" aria-labelledby="match-preview-title" data-preview-context="${escapeHtml(context)}">
     <div class="section-heading preview-heading"><div><span>Context abans del partit</span><h2 id="match-preview-title">Prèvia del partit</h2></div><span class="preview-freshness">${freshness === "stale" ? "Dades antigues" : "Actualitzada"} · ${escapeHtml(fetchedAt)}</span></div>
     <div class="preview-match-meta"><strong>${escapeHtml(preview.competitionName || "Competició")}</strong><span>Temporada ${escapeHtml(preview.season || "—")}</span></div>
@@ -67,52 +99,6 @@ export function matchPreviewMarkup(preview, { now = Date.now(), context = "publi
     ${warnings.length ? `<div class="preview-warnings" role="note"><strong>Dades parcials</strong><ul>${warnings.map(warning => `<li>${escapeHtml(warning)}</li>`).join("")}</ul></div>` : ""}
     <p class="preview-source">Font: ${preview.provider === "demo" ? escapeHtml(preview.source?.label || "Dades demo") : `<a href="https://www.api-football.com/" target="_blank" rel="noopener noreferrer nofollow">API-Football</a>`}. Context informatiu; el marcador oficial continua sota control de l’administrador.</p>
   </section>`;
-}
-
-export function adminMatchPreviewMarkup(pool, controllerState = {}) {
-  if (!pool) return "";
-  const loading = Boolean(controllerState.loading);
-  const remaining = Math.max(0, Number(controllerState.cooldownRemaining || 0));
-  const buttonText = loading ? "Carregant…" : pool.matchPreview ? "Actualitzar prèvia" : "Carregar prèvia automàtica";
-  return `<section class="admin-preview" aria-labelledby="admin-preview-title" aria-busy="${loading}">
-    <div class="section-heading"><div><span>Automatització opcional</span><h2 id="admin-preview-title">Prèvia del partit</h2></div><button class="button secondary" type="button" data-action="refresh-match-preview" ${loading || remaining > 0 || pool.status === "finished" ? "disabled" : ""}>${buttonText}</button></div>
-    <p class="preview-admin-help">Consulta el proveïdor només quan ho demanes. Les visites públiques reutilitzen l’última instantània desada.</p>
-    ${remaining > 0 ? `<p class="preview-cooldown" role="status">Podràs tornar-la a actualitzar en ${Math.ceil(remaining / 1000)} s.</p>` : ""}
-    ${controllerState.error ? `<div class="warning" role="alert"><strong>No s’ha actualitzat la prèvia</strong><p>${escapeHtml(controllerState.error)}</p></div>` : ""}
-    ${pool.matchPreview ? matchPreviewMarkup(pool.matchPreview, { context: "admin" }) : `<div class="empty-inline">Encara no hi ha cap prèvia desada. La resta de la porra funciona igualment.</div>`}
-  </section>`;
-}
-
-export function createMatchPreviewController({ now = () => Date.now(), cooldownMs = REFRESH_COOLDOWN_MS } = {}) {
-  let loading = false;
-  let cooldownUntil = 0;
-  let error = "";
-  let pending = null;
-  return {
-    state() {
-      return { loading, error, cooldownRemaining: Math.max(0, cooldownUntil - now()) };
-    },
-    clearError() { error = ""; },
-    async refresh(refreshPreview, poolId) {
-      if (pending) return pending;
-      if (now() < cooldownUntil) return { skipped: true };
-      loading = true;
-      error = "";
-      pending = Promise.resolve()
-        .then(() => refreshPreview(poolId))
-        .then(matchPreview => ({ matchPreview }))
-        .catch(cause => {
-          error = cause?.message || "No s’ha pogut actualitzar la prèvia del partit.";
-          return { error };
-        })
-        .finally(() => {
-          loading = false;
-          cooldownUntil = now() + cooldownMs;
-          pending = null;
-        });
-      return pending;
-    }
-  };
 }
 
 export function createDemoMatchPreview(pool) {

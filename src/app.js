@@ -38,11 +38,11 @@ import {
   isTerminalReservationError
 } from "./invitations.js";
 import { createAdminPoolCreationFlow, resolveAdminPoolView } from "./admin-pool-creation.js";
+import { matchPreviewMarkup } from "./match-preview.js";
 import {
-  adminMatchPreviewMarkup,
-  createMatchPreviewController,
-  matchPreviewMarkup
-} from "./match-preview.js";
+  adminManualMatchPreviewMarkup,
+  createManualMatchPreviewController
+} from "./manual-match-preview.js";
 import { createRepository } from "./repository.js";
 
 const app = document.querySelector("#app");
@@ -63,7 +63,7 @@ let adminMatchNotice = "";
 let subscribedPoolId = null;
 let unsubscribeRealtime = null;
 const adminPoolCreation = createAdminPoolCreationFlow();
-const matchPreviewController = createMatchPreviewController();
+const manualMatchPreviewController = createManualMatchPreviewController();
 
 if (repository.mode !== "demo") document.querySelector("[data-mode-banner]").hidden = true;
 
@@ -276,7 +276,10 @@ async function renderPublic() {
   const selectionPool = selectedCells.length * pool.poolPerBetCents;
   const canSubmitReservation = selectedCells.length > 0 && (repository.mode === "demo" || invitation.hasToken());
   const phasePresentation = publicPhasePresentation(state.match);
-  app.innerHTML = `${hero(pool, state.match)}${matchPreviewMarkup(pool.matchPreview, { crestUrls: { home: pool.homeImage, away: pool.awayImage } })}${halfTimeMarkup(state)}${finalSummaryMarkup(state)}${metricsMarkup(state.metrics)}
+  app.innerHTML = `${hero(pool, state.match)}${matchPreviewMarkup(pool.matchPreview, {
+    crestUrls: { home: pool.homeImage, away: pool.awayImage },
+    teamNames: { home: pool.homeTeam, away: pool.awayTeam }
+  })}${halfTimeMarkup(state)}${finalSummaryMarkup(state)}${metricsMarkup(state.metrics)}
     <div class="public-layout">
       <section class="panel bet-panel">
         <div class="section-heading"><div><span>${canPlay ? "1 · Tria una o dues apostes" : "Seguiment del partit"}</span><h2>Graella de resultats i especials</h2></div><strong>${state.metrics.freePlaces} places lliures</strong></div>
@@ -435,6 +438,7 @@ function clearDemoUiState() {
   historySummaryPoolId = null;
   adminMatchNotice = "";
   lastCreatedInvitation = null;
+  manualMatchPreviewController.load(null);
   activeAdminTab = "pool";
   view = "admin";
   window.history.replaceState(null, "", `${location.pathname}#admin`);
@@ -450,6 +454,7 @@ async function renderAdmin() {
   const pools = await repository.listPools();
   const { selectedPool: pool, formPool } = resolveAdminPoolView(pools, currentPoolId, adminPoolCreation.active);
   if (pool && !adminPoolCreation.active) currentPoolId = pool.id;
+  manualMatchPreviewController.load(pool);
   const state = pool ? await repository.getPoolState(pool.id) : null;
   const [historyStates, invitations] = await Promise.all([
     Promise.all(pools.map(item => repository.getPoolState(item.id))),
@@ -459,7 +464,7 @@ async function renderAdmin() {
     <div class="admin-tabs" role="tablist">
       <button data-admin-tab="pool" class="${activeAdminTab === "pool" ? "active" : ""}">1. Porra</button><button data-admin-tab="invitations" class="${activeAdminTab === "invitations" ? "active" : ""}" ${pool ? "" : "disabled"}>2. Invitacions</button><button data-admin-tab="bets" class="${activeAdminTab === "bets" ? "active" : ""}" ${pool ? "" : "disabled"}>3. Apostes</button><button data-admin-tab="match" class="${activeAdminTab === "match" ? "active" : ""}" ${pool ? "" : "disabled"}>4. Directe</button><button data-admin-tab="prizes" class="${activeAdminTab === "prizes" ? "active" : ""}" ${pool ? "" : "disabled"}>5. Premis</button><button data-admin-tab="history" class="${activeAdminTab === "history" ? "active" : ""}">6. Historial</button>
     </div>
-    <section class="panel admin-panel" data-admin-panel="pool" ${activeAdminTab === "pool" ? "" : "hidden"}><div class="section-heading"><div><span>Configuració</span><h2>${adminPoolCreation.active ? "Crear una nova porra" : pool ? "Editar porra" : "Crear la primera porra"}</h2></div>${pool && !adminPoolCreation.active ? `<span class="status-pill status-${pool.status}">${statusLabel(pool.status)}</span>` : ""}</div>${poolForm(formPool || {}, { showCancel: adminPoolCreation.active && Boolean(pool) })}${adminPoolCreation.active ? "" : `${adminPoolActions(pool)}${adminMatchPreviewMarkup(pool, matchPreviewController.state())}`}</section>
+    <section class="panel admin-panel" data-admin-panel="pool" ${activeAdminTab === "pool" ? "" : "hidden"}><div class="section-heading"><div><span>Configuració</span><h2>${adminPoolCreation.active ? "Crear una nova porra" : pool ? "Editar porra" : "Crear la primera porra"}</h2></div>${pool && !adminPoolCreation.active ? `<span class="status-pill status-${pool.status}">${statusLabel(pool.status)}</span>` : ""}</div>${poolForm(formPool || {}, { showCancel: adminPoolCreation.active && Boolean(pool) })}${adminPoolCreation.active ? "" : `${adminPoolActions(pool)}${adminManualMatchPreviewMarkup(pool, manualMatchPreviewController.state())}`}</section>
     <section class="panel admin-panel" data-admin-panel="invitations" ${activeAdminTab === "invitations" ? "" : "hidden"}>${adminInvitationsMarkup(pool, invitations)}</section>
     <section class="panel admin-panel" data-admin-panel="bets" ${activeAdminTab === "bets" ? "" : "hidden"}>${state ? adminBetsMarkup(state) : ""}</section>
     <section class="panel admin-panel" data-admin-panel="match" ${activeAdminTab === "match" ? "" : "hidden"}>${state ? adminMatchMarkup(state) : ""}</section>
@@ -656,7 +661,6 @@ app.addEventListener("click", async event => {
   }
   if (event.target.closest("[data-action='new-pool']")) {
     adminPoolCreation.start({ poolId: currentPoolId, tab: activeAdminTab });
-    matchPreviewController.clearError();
     activeAdminTab = "pool";
     lastCreatedInvitation = null;
     await renderAdmin();
@@ -686,16 +690,35 @@ app.addEventListener("click", async event => {
     await renderPublic();
     return;
   }
-  const refreshPreview = event.target.closest("[data-action='refresh-match-preview']");
-  if (refreshPreview) {
-    const operation = matchPreviewController.refresh(poolId => repository.refreshMatchPreview(poolId), currentPoolId);
+  if (event.target.closest("[data-action='preview-manual-match-preview']")) {
+    manualMatchPreviewController.setText(app.querySelector("[data-manual-preview-input]")?.value || "");
+    const result = manualMatchPreviewController.preview();
+    await renderAdmin();
+    if (result.error) app.querySelector("[data-manual-preview-input]")?.focus();
+    return;
+  }
+  if (event.target.closest("[data-action='save-manual-match-preview']")) {
+    manualMatchPreviewController.setText(app.querySelector("[data-manual-preview-input]")?.value || "");
+    const operation = manualMatchPreviewController.save(
+      (poolId, snapshot) => repository.saveManualMatchPreview(poolId, snapshot),
+      currentPoolId
+    );
     await renderAdmin();
     const result = await operation;
     if (result.error) notify(result.error, "error");
-    else if (!result.skipped) notify("Prèvia del partit actualitzada.");
+    else notify("Prèvia del partit desada.");
     await renderAdmin();
-    const remaining = matchPreviewController.state().cooldownRemaining;
-    if (remaining > 0) setTimeout(() => { if (view === "admin") renderAdmin().catch(error => notify(error.message || "No s’ha pogut recarregar l’administració.", "error")); }, remaining + 50);
+    return;
+  }
+  if (event.target.closest("[data-action='delete-manual-match-preview']")) {
+    const result = await manualMatchPreviewController.remove(
+      poolId => repository.deleteManualMatchPreview(poolId),
+      currentPoolId,
+      message => window.confirm(message)
+    );
+    if (result.error) notify(result.error, "error");
+    else if (result.removed) notify("Prèvia del partit eliminada.");
+    await renderAdmin();
     return;
   }
   if (event.target.closest("[data-action='confirm-reservation']")) return confirmReservation();
@@ -747,7 +770,7 @@ app.addEventListener("click", async event => {
     await renderAdmin();
   }
   const poolButton = event.target.closest("[data-pool]");
-  if (poolButton) { adminPoolCreation.cancel(); matchPreviewController.clearError(); currentPoolId = poolButton.dataset.pool; lastCreatedInvitation = null; await renderAdmin(); }
+  if (poolButton) { adminPoolCreation.cancel(); currentPoolId = poolButton.dataset.pool; lastCreatedInvitation = null; await renderAdmin(); }
   const revokeInvitation = event.target.closest("[data-revoke-invitation]");
   if (revokeInvitation) {
     await repository.revokePoolInvitation(revokeInvitation.dataset.revokeInvitation);
@@ -763,11 +786,16 @@ app.addEventListener("click", async event => {
     catch (error) { notify(error.message, "error"); }
   }
   if (event.target.closest("[data-action='clear-tracking']")) { lastTrackingToken = ""; await renderTracking(); }
-  if (event.target.closest("[data-action='admin-logout']")) { lastCreatedInvitation = null; await repository.signOut(); notify("Sessió tancada."); await renderAdmin(); }
+  if (event.target.closest("[data-action='admin-logout']")) { lastCreatedInvitation = null; manualMatchPreviewController.load(null); await repository.signOut(); notify("Sessió tancada."); await renderAdmin(); }
   if (event.target.closest("[data-action='retry']")) await render();
 });
 
 app.addEventListener("input", event => {
+  const manualPreviewInput = event.target.closest("[data-manual-preview-input]");
+  if (manualPreviewInput) {
+    manualMatchPreviewController.setText(manualPreviewInput.value);
+    return;
+  }
   const dateInput = event.target.closest("input[type='datetime-local']");
   if (!dateInput) return;
   const preview = app.querySelector(`[data-date-preview='${dateInput.name}']`);

@@ -230,6 +230,8 @@ test("els identificadors demo no poden arribar a cap operació de SupabaseReposi
   const demoBetId = `bet-${BET_ONE_ID}`;
   const blockedOperations = [
     () => repository.refreshMatchPreview(demoPoolId),
+    () => repository.saveManualMatchPreview(demoPoolId, {}),
+    () => repository.deleteManualMatchPreview(demoPoolId),
     () => repository.publishPool(demoPoolId),
     () => repository.setPoolStatus(demoPoolId, "open"),
     () => repository.createPoolInvitation(demoPoolId, "2099-01-01T00:00:00.000Z"),
@@ -317,6 +319,60 @@ test("la prèvia Supabase envia només l’UUID a l’Edge Function autenticada"
   const repository = new SupabaseRepository(client);
   assert.deepEqual(await repository.refreshMatchPreview(POOL_ID), expected);
   assert.deepEqual(calls, [{ name: "refresh-match-preview", options: { body: { poolId: POOL_ID } } }]);
+});
+
+test("les escriptures manuals Supabase usen UUID, match_preview i RLS de l'usuari", async () => {
+  const calls = [];
+  const snapshot = {
+    version: "1",
+    provider: "manual",
+    fetchedAt: "2026-08-25T08:00:00.000Z",
+    homeTeam: { highlights: ["Local fort"] },
+    awayTeam: { highlights: ["Visitant sòlid"] },
+    source: {}
+  };
+  const client = {
+    from(table) {
+      return {
+        update(payload) {
+          const call = { table, payload };
+          calls.push(call);
+          return {
+            eq(column, value) {
+              call.filter = { column, value };
+              return this;
+            },
+            select(columns) {
+              call.select = columns;
+              return this;
+            },
+            async single() {
+              return { data: { match_preview: payload.match_preview }, error: null };
+            },
+            then(resolve, reject) {
+              return Promise.resolve({ error: null }).then(resolve, reject);
+            }
+          };
+        }
+      };
+    }
+  };
+  const repository = new SupabaseRepository(client);
+  assert.deepEqual(await repository.saveManualMatchPreview(POOL_ID, snapshot), snapshot);
+  await repository.deleteManualMatchPreview(POOL_ID);
+  assert.deepEqual(calls, [
+    {
+      table: "pools",
+      payload: { match_preview: snapshot },
+      filter: { column: "id", value: POOL_ID },
+      select: "match_preview"
+    },
+    {
+      table: "pools",
+      payload: { match_preview: null },
+      filter: { column: "id", value: POOL_ID }
+    }
+  ]);
 });
 
 test("un error de refresh és segur i no modifica el snapshot carregat", async () => {

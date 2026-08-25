@@ -2,9 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
-  adminMatchPreviewMarkup,
   createDemoMatchPreview,
-  createMatchPreviewController,
   matchPreviewMarkup,
   previewFreshness
 } from "../src/match-preview.js";
@@ -61,42 +59,6 @@ test("dades antigues, parcials i absents degraden de forma informativa", () => {
   assert.match(html, /Classificació no disponible/);
   assert.match(html, /Últims resultats no disponibles/);
   assert.match(html, /Dades parcials/);
-});
-
-test("la UI administrativa diferencia estat buit, càrrega, error i cooldown", () => {
-  const pool = { status: "open", matchPreview: null };
-  assert.match(adminMatchPreviewMarkup(pool), /Carregar prèvia automàtica/);
-  assert.match(adminMatchPreviewMarkup(pool, { loading: true }), /Carregant…/);
-  assert.match(adminMatchPreviewMarkup(pool, { loading: true }), /aria-busy="true"/);
-  assert.match(adminMatchPreviewMarkup(pool, { error: "Error segur" }), /role="alert"[^]*Error segur/);
-  assert.match(adminMatchPreviewMarkup(pool, { cooldownRemaining: 12_300 }), /13 s/);
-  assert.match(adminMatchPreviewMarkup({ ...pool, status: "finished" }), /refresh-match-preview" disabled/);
-});
-
-test("el controlador evita duplicats i aplica cooldown també després d’un error", async () => {
-  let clock = 1_000;
-  let calls = 0;
-  let resolve;
-  const controller = createMatchPreviewController({ now: () => clock, cooldownMs: 100 });
-  const refresh = () => {
-    calls += 1;
-    return new Promise(done => { resolve = done; });
-  };
-  const first = controller.refresh(refresh, "pool");
-  const duplicate = controller.refresh(refresh, "pool");
-  assert.equal(controller.state().loading, true);
-  assert.equal(calls, 0);
-  await Promise.resolve();
-  assert.equal(calls, 1);
-  resolve(preview);
-  assert.deepEqual(await first, { matchPreview: preview });
-  assert.deepEqual(await duplicate, { matchPreview: preview });
-  assert.equal(controller.state().cooldownRemaining, 100);
-  assert.deepEqual(await controller.refresh(refresh, "pool"), { skipped: true });
-  clock += 101;
-  const failed = await controller.refresh(() => Promise.reject(new Error("Error públic")), "pool");
-  assert.deepEqual(failed, { error: "Error públic" });
-  assert.equal(controller.state().error, "Error públic");
 });
 
 test("DemoRepository genera i persisteix una fixture determinista sense crides externes", async () => {

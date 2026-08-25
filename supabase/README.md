@@ -1,6 +1,6 @@
 # Backend Supabase de Porra Live
 
-Les migracions versionades defineixen el backend compartit de Porra Live. Les quatre primeres estan desplegades una sola vegada a `porra-live-beta`; la cinquena és una proposta local pendent i no s’ha aplicat remotament. La quarta repara additivament el defecte de resolució de `coalesce` detectat a la tercera, que es conserva immutable.
+Les migracions versionades defineixen el backend compartit de Porra Live. Les cinc primeres estan aplicades a `porra-live-beta`; la sisena, que afegeix el variant manual de la prèvia, existeix només localment i continua pendent d’autorització remota.
 
 ## Estat de migracions
 
@@ -10,9 +10,10 @@ Les migracions versionades defineixen el backend compartit de Porra Live. Les qu
 | `migrations/20260810144836_add_supabase_foreign_key_indexes.sql` | `20260810144836` | Índexs de claus externes per a unions i accions referencials. |
 | `migrations/20260811102102_add_pool_invitations.sql` | `20260811102102` | Invitacions privades d’un sol ús, RPC administratives i reserva pública protegida per capacitat secreta. Conserva immutable el defecte històric `pg_catalog.coalesce`. |
 | `migrations/20260811104810_fix_pool_invitation_listing.sql` | `20260811104810` | Repara additivament `admin_list_pool_invitations(uuid)` amb `coalesce` SQL vàlid i reasserta els permisos mínims. |
-| `migrations/20260824072852_add_match_previews.sql` | Pendent (només local) | Afegeix el snapshot nullable, la whitelist pública i conserva RLS, grants i Realtime. |
+| `migrations/20260824072852_add_match_previews.sql` | `20260824072852` | Afegeix el snapshot nullable, la whitelist pública i conserva RLS, grants i Realtime. |
+| `migrations/20260825071626_add_manual_match_previews.sql` | Pendent (només local) | Admet snapshots manuals de fins a 8 KiB i amplia la whitelist pública sense trencar els snapshots automàtics. |
 
-L’historial remot continua alineat amb les quatre migracions aplicades; `20260824072852_add_match_previews.sql` existeix només en aquesta branca local i no forma part de l’historial remot. La reparació utilitza `CREATE OR REPLACE FUNCTION`, preserva el contracte i fa que la llista buida retorni correctament `[]` de tipus `jsonb`. El frontend només conté la configuració publishable de `porra-live-beta`; aquesta fase de prèvia no ha modificat comptes, dades ni configuració remota.
+La migració automàtica ja forma part de l’historial beta. Aquesta passada crea només `20260825071626_add_manual_match_previews.sql`: no l’aplica, no modifica migracions anteriors i no toca comptes, dades ni configuració remota.
 
 ## Arquitectura demo i Supabase
 
@@ -108,17 +109,13 @@ Frontend públic:
 
 No s’ha d’enviar mai al navegador cap secret, contrasenya, `service_role` o secret key.
 
-## Prèvia automàtica i API-Football
+## Prèvia manual i experiment API-Football
 
-`refresh-match-preview` és una Edge Function sota demanda; no és cron ni s’executa des de cap visita pública. El runtime valida el JWT, comprova una fila positiva a `admin_profiles` i utilitza `SUPABASE_ANON_KEY` amb el JWT de l’usuari perquè les lectures i l’actualització de `pools.match_preview` continuïn sotmeses a RLS. No utilitza `service_role`, SQL dinàmic ni metadades del client.
+La UI estàndard desa el variant manual mitjançant una actualització de `public.pools.match_preview` amb el client publishable i la sessió de l’administrador. La política `pools_admin_all` continua imposant l’autorització; no hi ha RPC privilegiada nova ni accés de taula per a anon. El `CHECK` manual limita forma, camps, longituds i mida a 8 KiB, mentre que el contracte automàtic existent de 32 KiB continua sent vàlid.
 
-La funció consulta API-Football amb `API_FOOTBALL_KEY` només al servidor. El pressupost és de 7 crides com a màxim per actualització: dos equips, una fixture inequívoca, classificació, dos historials recents i golejadors opcionals. Cada petició té 8 segons de timeout; un 429, timeout o error essencial avorta l’actualització i conserva el snapshot anterior. Les dades complementàries no disponibles produeixen avisos i no inventen valors.
+`private.public_match_preview(jsonb)` separa els dos variants i només projecta els camps aprovats. Realtime continua publicant exclusivament `pool_revisions`; invitacions, tracking i instruccions de pagament no canvien.
 
-La migració local afegeix una única columna `jsonb` nullable a `public.pools`, limitada a 32 KiB i amb un `CHECK` de versió/forma. No crea cap taula ni índex. `get_public_pool_state` només exposa una reconstrucció de camps aprovats i elimina els IDs de fixture, competició, equip i jugador. Les instruccions de pagament i els fluxos invite-only/tracking conserven el contracte anterior. L’actualització de `pools` activa el trigger de revisió existent; Realtime continua publicant exclusivament `pool_revisions`.
-
-La funció, la migració i el secret no s’han desplegat ni aplicat a `porra-live-beta`. Abans d’una autorització remota cal confirmar amb una clau real que el pla free cobreix la temporada activa de La Liga i repetir RLS, contracte públic, advisors i proves de fallada.
-
-La funció antiga `sync-live-score` continua sent una referència desactivada i no comparteix el flux nou.
+`refresh-match-preview` es conserva desplegada a beta com a experiment autenticat, però el frontend estàndard ja no conté cap acció que la invoqui. Activar el flux manual no requereix desplegar la funció, llegir secrets ni consumir peticions d’API-Football. La funció antiga `sync-live-score` també continua fora del flux.
 
 ## Control antiabús invite-only
 
