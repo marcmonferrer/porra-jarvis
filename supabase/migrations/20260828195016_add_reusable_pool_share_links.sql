@@ -39,7 +39,7 @@ begin
   select pg_catalog.jsonb_build_object(
     'createdAt', invitation.created_at, 'expiresAt', pool.closes_at, 'revokedAt', invitation.revoked_at,
     'status', case when invitation.revoked_at is not null then 'revoked'
-      when pool.status <> 'open' or pool.closes_at <= pg_catalog.now() then 'expired' else 'active' end,
+      when pool.status in ('closed', 'finished') or pool.closes_at <= pg_catalog.now() then 'expired' else 'active' end,
     'usageCount', invitation.usage_count)
   into link_state from private.pool_invitations invitation
   where invitation.pool_id = target_pool_id and invitation.is_reusable
