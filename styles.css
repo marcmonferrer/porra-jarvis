@@ -407,3 +407,24 @@ td:last-child { display: flex; gap: 6px; }
   .share-link-created .private-link { align-items: stretch; flex-direction: column; }
   .share-link-created .private-link input { width: 100%; }
 }
+
+.pool-rules {
+  margin: 22px 0;
+  border-left: 5px solid var(--blue);
+}
+.pool-rules__summary { margin: .5rem 0 1rem; font-weight: 800; color: var(--blue); }
+.pool-rules ol {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .7rem 1.5rem;
+  margin: 0;
+  padding-left: 1.4rem;
+}
+.pool-rules li { padding-left: .25rem; line-height: 1.5; }
+.organizer-note { margin-top: 1rem; padding: 1rem; border-radius: 14px; background: #fff7df; }
+.organizer-note p { margin: .35rem 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.pool-rules--admin { margin-top: 24px; background: #f8fbff; }
+@media (max-width: 520px) {
+  .pool-rules { padding: 18px 16px; }
+  .pool-rules ol { grid-template-columns: 1fr; gap: .65rem; }
+}

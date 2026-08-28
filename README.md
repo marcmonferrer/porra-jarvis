@@ -9,7 +9,7 @@ La versió actual inclou un mode demo local complet i un backend compartit amb S
 ### Administració
 
 - Crear i editar múltiples porres.
-- Generar, consultar i revocar invitacions individuals d’un sol ús.
+- Crear un únic enllaç reutilitzable per porra, consultar-ne l’estat agregat i revocar-lo o rotar-lo; les invitacions individuals antigues continuen compatibles.
 - Configurar equips, imatges, horaris, preus, instruccions de pagament i quatre apostes especials.
 - Publicar, tancar i reobrir participacions.
 - Confirmar pagaments, alliberar reserves i corregir noms o apostes.
@@ -21,7 +21,7 @@ La versió actual inclou un mode demo local complet i un backend compartit amb S
 ### Participants
 
 - Participació sense compte.
-- Accés mitjançant una invitació individual d’un sol ús en mode Supabase.
+- Accés mitjançant l’enllaç privat reutilitzable de la porra en mode Supabase.
 - Una o dues apostes diferents per participant.
 - Dues places independents per casella.
 - Resum del cost i de l’import destinat al pot abans de confirmar.
@@ -113,9 +113,9 @@ Consulta [supabase/README.md](supabase/README.md) per al model i el desplegament
 
 - Supabase Auth només s’utilitza per a l’administrador i l’autorització depèn exclusivament de `admin_profiles`.
 - Els participants no creen compte.
-- Les reserves públiques entren per l’RPC transaccional `create_public_reservation` i requereixen una invitació individual vàlida.
+- Les reserves públiques entren per RPC transaccional i requereixen un enllaç reutilitzable o una invitació individual legacy vàlids.
 - Cada invitació conté un token aleatori de 256 bits que només es mostra en generar-la; la base només en desa el hash SHA-256.
-- Una invitació permet crear exactament una participació i queda consumida dins de la mateixa transacció.
+- L’enllaç reutilitzable no es consumeix: cada reserva correcta incrementa només un comptador agregat. Les invitacions individuals legacy continuen consumint-se una vegada.
 - L’RPC utilitza bloquejos de transacció per impedir una tercera ocupació simultània.
 - La base de dades limita dues apostes actives per participant i dues places per casella.
 - El públic no pot modificar pagaments, resultats ni premis.
@@ -197,3 +197,10 @@ El frontend manual només s’ha de publicar després d’aplicar i validar la m
 **Marc Monferrer** — AI Consultant & Front-End Developer
 
 [LinkedIn](https://www.linkedin.com/in/marcmonferrer/) · [marcmonferrer.ai@gmail.com](mailto:marcmonferrer.ai@gmail.com)
+
+
+## Enllaç reutilitzable i regles completes (pendent de desplegament)
+
+Aquest HEAD local afegeix un únic enllaç compartible per porra. El token de 256 bits només es retorna en crear o rotar, viatja al fragment #invite=, i la base només en desa SHA-256. Després d’una recàrrega, Administració mostra estat, data i usos agregats, però mai no recupera el secret. Les invitacions individuals anteriors continuen funcionant.
+
+La vista pública mostra Com funciona la porra abans de la graella i Administració reutilitza el mateix model com a Vista de les regles. El model deriva preu, tancament Europe/Madrid, límits, 25/50/25, especials, pagaments i redistribució de les constants que governen el motor. La nota i el contacte públic són opcionals, acotats i renderitzats com a text pla. Les migracions locals noves encara no s’han aplicat remotament.

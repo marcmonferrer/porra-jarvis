@@ -1,9 +1,10 @@
+import { DEFAULT_CELL_CAPACITY, DEFAULT_MAX_ENTRIES, DEFAULT_PRIZE_PERCENTAGES, normalizeOrganizerText, validatePrizePercentages } from "./pool-rules.js";
 export const POOL_STATUSES = ["draft", "open", "closed", "finished"];
 export const PAYMENT_STATUSES = ["pending", "paid", "released"];
 export const SPECIAL_STATUSES = ["pending", "completed", "failed"];
 export const SPECIAL_CELLS = ["3-3", "3-4", "4-3", "4-4"];
-export const MAX_BETS_PER_PARTICIPANT = 2;
-export const MAX_OCCUPANCY_PER_CELL = 2;
+export const MAX_BETS_PER_PARTICIPANT = DEFAULT_MAX_ENTRIES;
+export const MAX_OCCUPANCY_PER_CELL = DEFAULT_CELL_CAPACITY;
 
 export function makeId(prefix = "id") {
   const random = globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2);
@@ -112,8 +113,8 @@ export function poolMetrics(pool, bets) {
   const paid = paidBets(bets);
   const pending = active.filter(bet => bet.paymentStatus === "pending");
   return {
-    capacity: 50,
-    freePlaces: Math.max(0, 50 - active.length),
+    capacity: listCells().length * MAX_OCCUPANCY_PER_CELL,
+    freePlaces: Math.max(0, listCells().length * MAX_OCCUPANCY_PER_CELL - active.length),
     pendingPlaces: pending.length,
     paidPlaces: paid.length,
     confirmedRevenueCents: paid.length * pool.priceCents,
@@ -237,11 +238,11 @@ function allocateEqual(totalCents, winnerIds) {
   return new Map(sorted.map(id => [id, base + (remainder-- > 0 ? 1 : 0)]));
 }
 
-function splitPot(totalCents) {
+function splitPot(totalCents, weights = DEFAULT_PRIZE_PERCENTAGES) {
   const categories = [
-    { key: "halfBase", weight: 25, order: 0 },
-    { key: "finalBase", weight: 50, order: 1 },
-    { key: "specialBase", weight: 25, order: 2 }
+    { key: "halfBase", weight: weights.half, order: 0 },
+    { key: "finalBase", weight: weights.final, order: 1 },
+    { key: "specialBase", weight: weights.special, order: 2 }
   ].map(category => {
     const numerator = totalCents * category.weight;
     return { ...category, cents: Math.floor(numerator / 100), remainder: numerator % 100 };
@@ -270,7 +271,8 @@ function addAwards(target, source, category) {
 export function calculatePrizes({ pool, bets, match }) {
   const eligible = paidBets(bets);
   const totalPotCents = eligible.length * pool.poolPerBetCents + Number(pool.carryoverCents || 0);
-  const { halfBase, finalBase, specialBase } = splitPot(totalPotCents);
+  const prizePercentages = validatePrizePercentages(pool.prizePercentages || DEFAULT_PRIZE_PERCENTAGES);
+  const { halfBase, finalBase, specialBase } = splitPot(totalPotCents, prizePercentages);
 
   const halfKey = match.halfHome == null || match.halfAway == null
     ? null
@@ -334,6 +336,8 @@ export function calculatePrizes({ pool, bets, match }) {
 }
 
 export function createPool(input = {}) {
+  const organizer = normalizeOrganizerText({ note: input.organizerNote, contact: input.organizerContact });
+  const prizePercentages = validatePrizePercentages(input.prizePercentages || DEFAULT_PRIZE_PERCENTAGES);
   const priceCents = toCents(input.price ?? 4);
   const poolPerBetCents = toCents(input.poolPerBet ?? 3.5);
   const feeCents = toCents(input.fee ?? 0.5);
@@ -355,6 +359,11 @@ export function createPool(input = {}) {
     feeCents,
     carryoverCents: toCents(input.carryover ?? 0),
     paymentInstructions: String(input.paymentInstructions || "").trim(),
+    organizerNote: organizer.note,
+    organizerContact: organizer.contact,
+    maxEntriesPerParticipant: DEFAULT_MAX_ENTRIES,
+    cellCapacity: DEFAULT_CELL_CAPACITY,
+    prizePercentages,
     matchPreview: input.matchPreview || null,
     status: POOL_STATUSES.includes(input.status) ? input.status : "draft",
     publishedAt: input.publishedAt || null,

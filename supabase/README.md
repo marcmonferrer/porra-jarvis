@@ -144,3 +144,13 @@ La passada amb dades exclusivament sintètiques confirma:
 4. Repetir la validació completa abans d’un desplegament públic.
 
 El frontend està configurat únicament amb la URL i la clau publishable de `porra-live-beta`; durant aquesta integració de prèvia no s’han creat usuaris ni dades, i el mòdul nou no s’ha desplegat. `finalissima-porra` queda fora d’aquest flux.
+
+
+## Contractes locals pendents: enllaç compartit i regles
+
+- `20260828195016_add_reusable_pool_share_links.sql`: amplia `private.pool_invitations` amb tipus reutilitzable i comptador agregat; afegeix RPC administratives de crear, consultar i rotar; manté la reserva pública de quatre arguments i les invitacions legacy.
+- `20260828200050_add_complete_configurable_pool_rules.sql`: afegeix `organizer_note` i `organizer_contact` nullables i acotats; amplia exclusivament la whitelist de `get_public_pool_state`.
+
+Les RPC noves exigeixen `private.require_porra_admin()`, `search_path = ''`, noms qualificats, revocació explícita i `EXECUTE` només per `authenticated`. La taula privada continua sense grants directes. El token de 256 bits només es retorna al crear o rotar, la base desa SHA-256, i ús, rotació, límit per nom normalitzat i capacitat de casella es resolen dins de la transacció.
+
+La projecció pública nova només inclou nota i contacte explícitament configurats; no exposa hashes, tokens, instruccions de pagament, UUID ni dades de participants. Cap d’aquestes dues migracions s’ha aplicat remotament en aquesta fase.
