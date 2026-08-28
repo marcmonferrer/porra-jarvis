@@ -390,3 +390,20 @@ td:last-child { display: flex; gap: 6px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+.share-link-status {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .75rem;
+  margin: 1rem 0;
+}
+.share-link-status div { padding: .8rem; border-radius: 14px; background: var(--surface-soft, #fff5f8); }
+.share-link-status dt { font-size: .78rem; color: var(--muted); }
+.share-link-status dd { margin: .2rem 0 0; font-weight: 800; }
+.share-copy { min-height: 48px; }
+.sr-status { min-height: 1.25rem; margin: .45rem 0 0; }
+@media (max-width: 520px) {
+  .share-link-status { grid-template-columns: 1fr; }
+  .share-link-created .private-link { align-items: stretch; flex-direction: column; }
+  .share-link-created .private-link input { width: 100%; }
+}

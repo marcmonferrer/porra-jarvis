@@ -38,6 +38,7 @@ import {
   isTerminalReservationError
 } from "./invitations.js";
 import { createAdminPoolCreationFlow, resolveAdminPoolView } from "./admin-pool-creation.js";
+import { adminShareLinkMarkup, buildPoolShareUrl, copyShareLink } from "./share-links.js";
 import { matchPreviewMarkup } from "./match-preview.js";
 import {
   adminManualMatchPreviewMarkup,
@@ -57,6 +58,7 @@ let selectedCells = [];
 let lastTrackingToken = new URLSearchParams(location.search).get("track") || "";
 let invitationNotice = invitation.valid ? "detected" : invitation.detected ? "invalid" : "missing";
 let lastCreatedInvitation = null;
+let lastCreatedShareLink = null;
 let activeAdminTab = "pool";
 let historySummaryPoolId = null;
 let adminMatchNotice = "";
@@ -456,16 +458,16 @@ async function renderAdmin() {
   if (pool && !adminPoolCreation.active) currentPoolId = pool.id;
   manualMatchPreviewController.load(pool);
   const state = pool ? await repository.getPoolState(pool.id) : null;
-  const [historyStates, invitations] = await Promise.all([
+  const [historyStates, shareLink] = await Promise.all([
     Promise.all(pools.map(item => repository.getPoolState(item.id))),
-    pool && repository.mode === "supabase" ? repository.listPoolInvitations(pool.id) : Promise.resolve([])
+    pool && repository.mode === "supabase" ? repository.getPoolShareLink(pool.id) : Promise.resolve(null)
   ]);
   app.innerHTML = `<section class="admin-hero"><div><span class="eyebrow">Panell d’administració</span><h1>Gestiona Porra Live</h1><p>Crea porres, valida pagaments i publica els premis des d’un únic lloc.</p></div><div class="admin-hero__actions"><button class="button primary small" type="button" data-action="new-pool" ${adminPoolCreation.active ? "disabled" : ""}>+ Nova porra</button><div class="admin-session">${repository.mode === "demo" ? "Sessió demo" : escapeHtml(session.user.email)}${repository.mode === "demo" ? "" : `<button data-action="admin-logout">Sortir</button>`}</div></div></section>
     <div class="admin-tabs" role="tablist">
       <button data-admin-tab="pool" class="${activeAdminTab === "pool" ? "active" : ""}">1. Porra</button><button data-admin-tab="invitations" class="${activeAdminTab === "invitations" ? "active" : ""}" ${pool ? "" : "disabled"}>2. Invitacions</button><button data-admin-tab="bets" class="${activeAdminTab === "bets" ? "active" : ""}" ${pool ? "" : "disabled"}>3. Apostes</button><button data-admin-tab="match" class="${activeAdminTab === "match" ? "active" : ""}" ${pool ? "" : "disabled"}>4. Directe</button><button data-admin-tab="prizes" class="${activeAdminTab === "prizes" ? "active" : ""}" ${pool ? "" : "disabled"}>5. Premis</button><button data-admin-tab="history" class="${activeAdminTab === "history" ? "active" : ""}">6. Historial</button>
     </div>
     <section class="panel admin-panel" data-admin-panel="pool" ${activeAdminTab === "pool" ? "" : "hidden"}><div class="section-heading"><div><span>Configuració</span><h2>${adminPoolCreation.active ? "Crear una nova porra" : pool ? "Editar porra" : "Crear la primera porra"}</h2></div>${pool && !adminPoolCreation.active ? `<span class="status-pill status-${pool.status}">${statusLabel(pool.status)}</span>` : ""}</div>${poolForm(formPool || {}, { showCancel: adminPoolCreation.active && Boolean(pool) })}${adminPoolCreation.active ? "" : `${adminPoolActions(pool)}${adminManualMatchPreviewMarkup(pool, manualMatchPreviewController.state())}`}</section>
-    <section class="panel admin-panel" data-admin-panel="invitations" ${activeAdminTab === "invitations" ? "" : "hidden"}>${adminInvitationsMarkup(pool, invitations)}</section>
+    <section class="panel admin-panel" data-admin-panel="invitations" ${activeAdminTab === "invitations" ? "" : "hidden"}>${repository.mode === "demo" ? adminInvitationsMarkup(pool, []) : adminShareLinkMarkup({ pool, shareLink, createdShareUrl: lastCreatedShareLink?.poolId === pool?.id ? buildPoolShareUrl({ baseUrl: `${location.origin}${location.pathname}`, poolSlug: pool.slug, shareToken: lastCreatedShareLink.shareToken }) : null, escapeHtml, formatDateTime })}</section>
     <section class="panel admin-panel" data-admin-panel="bets" ${activeAdminTab === "bets" ? "" : "hidden"}>${state ? adminBetsMarkup(state) : ""}</section>
     <section class="panel admin-panel" data-admin-panel="match" ${activeAdminTab === "match" ? "" : "hidden"}>${state ? adminMatchMarkup(state) : ""}</section>
     <section class="panel admin-panel" data-admin-panel="prizes" ${activeAdminTab === "prizes" ? "" : "hidden"}>${state ? adminPrizesMarkup(state) : ""}</section>
@@ -726,6 +728,29 @@ app.addEventListener("click", async event => {
     const pool = await repository.getPoolState(currentPoolId);
     const message = `${pool.pool.title}\n${matchName(pool.pool)}\nPartit: ${formatDateTime(pool.pool.matchAt)}\nTancament: ${formatDateTime(pool.pool.closesAt)}\nParticipa a Porra Live: ${location.origin}${location.pathname}?pool=${pool.pool.slug}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
+  }
+  const shareCopy = event.target.closest("[data-copy-share]");
+  if (shareCopy) {
+    const copied = await copyShareLink(shareCopy.dataset.copyShare, { clipboard: navigator.clipboard });
+    const status = app.querySelector("[data-share-copy-status]");
+    if (status) status.textContent = copied ? "Enllaç copiat" : "No s’ha pogut copiar l’enllaç.";
+    notify(copied ? "Enllaç copiat" : "No s’ha pogut copiar l’enllaç.", copied ? "success" : "error");
+    return;
+  }
+  if (event.target.closest("[data-action='create-share-link']")) {
+    const created = await repository.createPoolShareLink(currentPoolId);
+    lastCreatedShareLink = { poolId: currentPoolId, ...created };
+    notify("Enllaç creat. Copia’l ara.");
+    await renderAdmin();
+    return;
+  }
+  if (event.target.closest("[data-action='rotate-share-link']")) {
+    if (!window.confirm("L’enllaç actual deixarà de funcionar. Vols revocar-lo i crear-ne un de nou?")) return;
+    const created = await repository.rotatePoolShareLink(currentPoolId);
+    lastCreatedShareLink = { poolId: currentPoolId, ...created };
+    notify("Enllaç anterior revocat. Copia el nou enllaç ara.");
+    await renderAdmin();
+    return;
   }
   const invitationWhatsApp = event.target.closest("[data-invitation-whatsapp]");
   if (invitationWhatsApp) {

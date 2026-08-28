@@ -539,6 +539,26 @@ export class SupabaseRepository {
     return data;
   }
 
+  async createPoolShareLink(poolId) {
+    requireSupabaseUuid(poolId, "pool");
+    const { data, error } = await this.client.rpc("admin_create_pool_share_link", { target_pool_id: poolId });
+    if (error) throw error;
+    return data;
+  }
+
+  async getPoolShareLink(poolId) {
+    requireSupabaseUuid(poolId, "pool");
+    const { data, error } = await this.client.rpc("admin_get_pool_share_link", { target_pool_id: poolId });
+    if (error) throw error;
+    return data;
+  }
+
+  async rotatePoolShareLink(poolId) {
+    requireSupabaseUuid(poolId, "pool");
+    const { data, error } = await this.client.rpc("admin_rotate_pool_share_link", { target_pool_id: poolId });
+    if (error) throw error;
+    return data;
+  }
   async createPoolInvitation(poolId, expiresAt) {
     requireSupabaseUuid(poolId, "pool");
     const { data, error } = await this.client.rpc("admin_create_pool_invitation", {
