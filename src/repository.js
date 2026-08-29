@@ -378,7 +378,8 @@ export class SupabaseRepository {
       matchAt: row.match_at, closesAt: row.closes_at,
       priceCents: row.price_cents, poolPerBetCents: row.pool_per_bet_cents,
       feeCents: row.fee_cents, carryoverCents: row.carryover_cents,
-      paymentInstructions: row.payment_instructions, matchPreview: row.match_preview || null, status: row.status,
+      paymentInstructions: row.payment_instructions, organizerNote: row.organizer_note || "", organizerContact: row.organizer_contact || "",
+      matchPreview: row.match_preview || null, status: row.status,
       publishedAt: row.published_at, createdAt: row.created_at, updatedAt: row.updated_at,
       specials: [...(row.special_bets || [])].sort((a, b) => a.sort_order - b.sort_order).map(item => ({
         id: item.id, cellKey: item.cell_key, title: item.title, description: item.description
@@ -408,7 +409,8 @@ export class SupabaseRepository {
       match_at: pool.matchAt, closes_at: pool.closesAt,
       price_cents: pool.priceCents, pool_per_bet_cents: pool.poolPerBetCents,
       fee_cents: pool.feeCents, carryover_cents: pool.carryoverCents,
-      payment_instructions: pool.paymentInstructions, status: current?.status || "draft",
+      payment_instructions: pool.paymentInstructions, organizer_note: pool.organizerNote || null,
+      organizer_contact: pool.organizerContact || null, status: current?.status || "draft",
       created_by: current?.createdBy || session.user.id, updated_at: new Date().toISOString()
     };
     const poolTable = this.client.from("pools");
@@ -539,6 +541,26 @@ export class SupabaseRepository {
     return data;
   }
 
+  async createPoolShareLink(poolId) {
+    requireSupabaseUuid(poolId, "pool");
+    const { data, error } = await this.client.rpc("admin_create_pool_share_link", { target_pool_id: poolId });
+    if (error) throw error;
+    return data;
+  }
+
+  async getPoolShareLink(poolId) {
+    requireSupabaseUuid(poolId, "pool");
+    const { data, error } = await this.client.rpc("admin_get_pool_share_link", { target_pool_id: poolId });
+    if (error) throw error;
+    return data;
+  }
+
+  async rotatePoolShareLink(poolId) {
+    requireSupabaseUuid(poolId, "pool");
+    const { data, error } = await this.client.rpc("admin_rotate_pool_share_link", { target_pool_id: poolId });
+    if (error) throw error;
+    return data;
+  }
   async createPoolInvitation(poolId, expiresAt) {
     requireSupabaseUuid(poolId, "pool");
     const { data, error } = await this.client.rpc("admin_create_pool_invitation", {

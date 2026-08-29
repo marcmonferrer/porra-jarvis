@@ -99,16 +99,16 @@ test("la configuració pública queda restringida a porra-live-beta i no conté 
   assert.match(repositorySource, /config\.supabaseUrl !== BETA_SUPABASE_URL/);
 });
 
-test("l'aplicació captura abans de connectar, neteja el token i integra els tres controls admin", () => {
+test("l'aplicació captura abans de connectar, neteja el token i integra el flux reutilitzable admin", () => {
   const appSource = readFileSync(new URL("../src/app.js", import.meta.url), "utf8");
   const captureAt = appSource.indexOf("captureInvitationFromUrl({ location, history: window.history })");
   const repositoryAt = appSource.indexOf("await createRepository(config)");
   assert.ok(captureAt >= 0 && captureAt < repositoryAt);
   assert.match(appSource, /invitationToken: repository\.mode === "supabase" \? invitation\.value\(\) : undefined/);
   assert.match(appSource, /invitation\.clear\(\)/);
-  assert.match(appSource, /repository\.createPoolInvitation/);
-  assert.match(appSource, /repository\.listPoolInvitations/);
-  assert.match(appSource, /repository\.revokePoolInvitation/);
+  assert.match(appSource, /repository\.createPoolShareLink/);
+  assert.match(appSource, /repository\.getPoolShareLink/);
+  assert.match(appSource, /repository\.rotatePoolShareLink/);
   assert.doesNotMatch(appSource, /console\./);
 });
 
