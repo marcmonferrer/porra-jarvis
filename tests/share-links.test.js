@@ -44,4 +44,3 @@ test("la còpia usa Clipboard API i té fallback accessible", async () => {
   };
   assert.equal(await copyShareLink("fallback", { clipboard: null, documentObject: fake }), true);
 });
-
