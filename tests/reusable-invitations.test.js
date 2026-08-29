@@ -4,6 +4,7 @@ import test from "node:test";
 import { SupabaseRepository } from "../src/repository.js";
 
 const migration = await readFile(new URL("../supabase/migrations/20260828195016_add_reusable_pool_share_links.sql", import.meta.url), "utf8");
+const statusRepair = await readFile(new URL("../supabase/migrations/20260828204032_fix_pool_share_link_status_lookup.sql", import.meta.url), "utf8");
 const poolId = "4932ae42-3868-4785-b102-a96f33075b56";
 
 function body(name) {
@@ -34,6 +35,19 @@ test("creació i rotació generen 256 bits, desen SHA-256 i retornen el secret n
   assert.match(read, /'usageCount', invitation\.usage_count/);
 });
 
+test("la reparació de l'estat declara l'alias de la porra i preserva el contracte privilegiat", () => {
+  const match = statusRepair.match(/create or replace function public\.admin_get_pool_share_link\(target_pool_id uuid\)[^]*?\n\$\$;/i);
+  assert.ok(match, "missing repaired admin_get_pool_share_link");
+  const sql = match[0];
+  assert.match(sql, /from private\.pool_invitations invitation\s+join public\.pools pool on pool\.id = invitation\.pool_id/);
+  assert.match(sql, /'expiresAt', pool\.closes_at/);
+  assert.match(sql, /pool\.status in \('closed', 'finished'\)/);
+  assert.match(sql, /private\.require_porra_admin\(\)/);
+  assert.match(sql, /stable security definer set search_path = ''/);
+  assert.doesNotMatch(sql, /shareToken|invitationToken|token_hash|created_by|poolId/);
+  assert.match(statusRepair, /revoke execute on function public\.admin_get_pool_share_link\(uuid\)\s+from public, anon, authenticated/);
+  assert.match(statusRepair, /grant execute on function public\.admin_get_pool_share_link\(uuid\)\s+to authenticated/);
+});
 test("la reserva reutilitzable és serialitzada, no es consumeix i conserva invitacions antigues", () => {
   const sql = body("create_public_reservation");
   assert.match(sql, /and revoked_at is null and \(\(is_reusable\) or \(expires_at > pg_catalog\.now\(\) and consumed_at is null\)\)[\s\S]*for update/);
