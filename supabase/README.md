@@ -1,6 +1,6 @@
 # Backend Supabase de Porra Live
 
-Les migracions versionades defineixen el backend compartit de Porra Live. Les cinc primeres estan aplicades a `porra-live-beta`; la sisena, que afegeix el variant manual de la prèvia, existeix només localment i continua pendent d’autorització remota.
+Les migracions versionades defineixen el backend compartit de Porra Live. Les nou migracions estan aplicades i validades a `porra-live-beta`: l’historial local i remot està alineat 9/9 i no hi ha cap migració pendent.
 
 ## Estat de migracions
 
@@ -11,9 +11,12 @@ Les migracions versionades defineixen el backend compartit de Porra Live. Les ci
 | `migrations/20260811102102_add_pool_invitations.sql` | `20260811102102` | Invitacions privades d’un sol ús, RPC administratives i reserva pública protegida per capacitat secreta. Conserva immutable el defecte històric `pg_catalog.coalesce`. |
 | `migrations/20260811104810_fix_pool_invitation_listing.sql` | `20260811104810` | Repara additivament `admin_list_pool_invitations(uuid)` amb `coalesce` SQL vàlid i reasserta els permisos mínims. |
 | `migrations/20260824072852_add_match_previews.sql` | `20260824072852` | Afegeix el snapshot nullable, la whitelist pública i conserva RLS, grants i Realtime. |
-| `migrations/20260825071626_add_manual_match_previews.sql` | Pendent (només local) | Admet snapshots manuals de fins a 8 KiB i amplia la whitelist pública sense trencar els snapshots automàtics. |
+| `migrations/20260825071626_add_manual_match_previews.sql` | `20260825071626` | Admet snapshots manuals de fins a 8 KiB i amplia la whitelist pública sense trencar els snapshots automàtics. |
+| `migrations/20260828195016_add_reusable_pool_share_links.sql` | `20260828195016` | Afegeix un únic enllaç reutilitzable per porra, rotació, revocació i comptador d’usos sense exposar el secret. |
+| `migrations/20260828200050_add_complete_configurable_pool_rules.sql` | `20260828200050` | Afegeix nota i contacte opcionals i amplia la projecció pública sanejada de les regles. |
+| `migrations/20260828204032_fix_pool_share_link_status_lookup.sql` | `20260828204032` | Repara additivament la consulta d’estat de l’enllaç compartit i preserva autorització, contracte i permisos mínims. |
 
-La migració automàtica ja forma part de l’historial beta. Aquesta passada crea només `20260825071626_add_manual_match_previews.sql`: no l’aplica, no modifica migracions anteriors i no toca comptes, dades ni configuració remota.
+Els nou contractes formen part de l’historial actiu de `porra-live-beta`, sense drift ni migracions pendents. L’activació d’aquests contractes no implica que el frontend d’aquesta versió ja estigui publicat a GitHub Pages.
 
 ## Arquitectura demo i Supabase
 
@@ -146,11 +149,12 @@ La passada amb dades exclusivament sintètiques confirma:
 El frontend està configurat únicament amb la URL i la clau publishable de `porra-live-beta`; durant aquesta integració de prèvia no s’han creat usuaris ni dades, i el mòdul nou no s’ha desplegat. `finalissima-porra` queda fora d’aquest flux.
 
 
-## Contractes locals pendents: enllaç compartit i regles
+## Contractes actius a beta: enllaç compartit i regles
 
 - `20260828195016_add_reusable_pool_share_links.sql`: amplia `private.pool_invitations` amb tipus reutilitzable i comptador agregat; afegeix RPC administratives de crear, consultar i rotar; manté la reserva pública de quatre arguments i les invitacions legacy.
 - `20260828200050_add_complete_configurable_pool_rules.sql`: afegeix `organizer_note` i `organizer_contact` nullables i acotats; amplia exclusivament la whitelist de `get_public_pool_state`.
+- `20260828204032_fix_pool_share_link_status_lookup.sql`: repara de manera forward-only la consulta d’estat de `admin_get_pool_share_link` sense alterar-ne la signatura, l’autorització ni els grants.
 
 Les RPC noves exigeixen `private.require_porra_admin()`, `search_path = ''`, noms qualificats, revocació explícita i `EXECUTE` només per `authenticated`. La taula privada continua sense grants directes. El token de 256 bits només es retorna al crear o rotar, la base desa SHA-256, i ús, rotació, límit per nom normalitzat i capacitat de casella es resolen dins de la transacció.
 
-La projecció pública nova només inclou nota i contacte explícitament configurats; no exposa hashes, tokens, instruccions de pagament, UUID ni dades de participants. Cap d’aquestes dues migracions s’ha aplicat remotament en aquesta fase.
+La projecció pública nova només inclou nota i contacte explícitament configurats; no exposa hashes, tokens, instruccions de pagament, UUID ni dades de participants. Les tres migracions d’aquesta secció estan aplicades i validades a `porra-live-beta`; el frontend corresponent continua pendent de la publicació actual a GitHub.

@@ -199,8 +199,8 @@ El frontend manual només s’ha de publicar després d’aplicar i validar la m
 [LinkedIn](https://www.linkedin.com/in/marcmonferrer/) · [marcmonferrer.ai@gmail.com](mailto:marcmonferrer.ai@gmail.com)
 
 
-## Enllaç reutilitzable i regles completes (pendent de desplegament)
+## Enllaç reutilitzable i regles completes (contractes actius a beta; frontend pendent de publicació)
 
 Aquest HEAD local afegeix un únic enllaç compartible per porra. El token de 256 bits només es retorna en crear o rotar, viatja al fragment #invite=, i la base només en desa SHA-256. Després d’una recàrrega, Administració mostra estat, data i usos agregats, però mai no recupera el secret. Les invitacions individuals anteriors continuen funcionant.
 
-La vista pública mostra Com funciona la porra abans de la graella i Administració reutilitza el mateix model com a Vista de les regles. El model deriva preu, tancament Europe/Madrid, límits, 25/50/25, especials, pagaments i redistribució de les constants que governen el motor. La nota i el contacte públic són opcionals, acotats i renderitzats com a text pla. Les migracions locals noves encara no s’han aplicat remotament.
+La vista pública mostra Com funciona la porra abans de la graella i Administració reutilitza el mateix model com a Vista de les regles. El model deriva preu, tancament Europe/Madrid, límits, 25/50/25, especials, pagaments i redistribució de les constants que governen el motor. La nota i el contacte públic són opcionals, acotats i renderitzats com a text pla. Els contractes d’enllaç reutilitzable, regles configurables i reparació de l’estat de l’enllaç estan actius i validats a `porra-live-beta`; les 9 migracions estan alineades i no n’hi ha cap de pendent. El frontend d’aquesta versió continua pendent de publicació mitjançant el procés actual de GitHub.
