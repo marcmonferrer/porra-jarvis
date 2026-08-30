@@ -476,7 +476,7 @@ async function renderAdmin() {
   const session = await repository.getSession();
   if (repository.mode !== "demo" && !session?.user) {
     lastCreatedInvitation = null;
-    app.innerHTML = `<section class="tracking-entry panel"><span class="eyebrow">Accés protegit</span><h1>Administració de Porra Live</h1><p>Inicia sessió amb l’únic compte administrador configurat a Supabase.</p><form data-form="admin-login"><label>Correu electrònic<input required name="email" type="email" autocomplete="username"></label><label>Contrasenya<input required name="password" type="password" autocomplete="current-password"></label><button class="button primary">Iniciar sessió</button></form></section>`;
+    app.innerHTML = `<section class="tracking-entry panel"><span class="eyebrow">Accés protegit</span><h1>Administració de Porra JARVIS</h1><p>Inicia sessió amb l’únic compte administrador configurat a Supabase.</p><form data-form="admin-login"><label>Correu electrònic<input required name="email" type="email" autocomplete="username"></label><label>Contrasenya<input required name="password" type="password" autocomplete="current-password"></label><button class="button primary">Iniciar sessió</button></form></section>`;
     return;
   }
   const pools = await repository.listPools();
@@ -488,7 +488,7 @@ async function renderAdmin() {
     Promise.all(pools.map(item => repository.getPoolState(item.id))),
     pool && repository.mode === "supabase" ? repository.getPoolShareLink(pool.id) : Promise.resolve(null)
   ]);
-  app.innerHTML = `<section class="admin-hero"><div><span class="eyebrow">Panell d’administració</span><h1>Gestiona Porra Live</h1><p>Crea porres, valida pagaments i publica els premis des d’un únic lloc.</p></div><div class="admin-hero__actions"><button class="button primary small" type="button" data-action="new-pool" ${adminPoolCreation.active ? "disabled" : ""}>+ Nova porra</button><div class="admin-session">${repository.mode === "demo" ? "Sessió demo" : escapeHtml(session.user.email)}${repository.mode === "demo" ? "" : `<button data-action="admin-logout">Sortir</button>`}</div></div></section>
+  app.innerHTML = `<section class="admin-hero"><div><span class="eyebrow">Panell d’administració</span><h1>Gestiona Porra JARVIS</h1><p>Crea porres, valida pagaments i publica els premis des d’un únic lloc.</p></div><div class="admin-hero__actions"><button class="button primary small" type="button" data-action="new-pool" ${adminPoolCreation.active ? "disabled" : ""}>+ Nova porra</button><div class="admin-session">${repository.mode === "demo" ? "Sessió demo" : escapeHtml(session.user.email)}${repository.mode === "demo" ? "" : `<button data-action="admin-logout">Sortir</button>`}</div></div></section>
     <div class="admin-tabs" role="tablist">
       <button data-admin-tab="pool" class="${activeAdminTab === "pool" ? "active" : ""}">1. Porra</button><button data-admin-tab="invitations" class="${activeAdminTab === "invitations" ? "active" : ""}" ${pool ? "" : "disabled"}>2. Invitacions</button><button data-admin-tab="bets" class="${activeAdminTab === "bets" ? "active" : ""}" ${pool ? "" : "disabled"}>3. Apostes</button><button data-admin-tab="match" class="${activeAdminTab === "match" ? "active" : ""}" ${pool ? "" : "disabled"}>4. Directe</button><button data-admin-tab="prizes" class="${activeAdminTab === "prizes" ? "active" : ""}" ${pool ? "" : "disabled"}>5. Premis</button><button data-admin-tab="history" class="${activeAdminTab === "history" ? "active" : ""}">6. Historial</button>
     </div>
@@ -677,7 +677,7 @@ async function render() {
     else if (view === "tracking") await renderTracking();
     else await renderPublic();
   } catch (error) {
-    app.innerHTML = `<section class="error-state panel"><h1>No s’ha pogut carregar Porra Live</h1><p>${escapeHtml(error.message || "Error inesperat")}</p><button class="button" data-action="retry">Tornar-ho a provar</button></section>`;
+    app.innerHTML = `<section class="error-state panel"><h1>No s’ha pogut carregar Porra JARVIS</h1><p>${escapeHtml(error.message || "Error inesperat")}</p><button class="button" data-action="retry">Tornar-ho a provar</button></section>`;
   } finally {
     app.setAttribute("aria-busy", "false");
   }
@@ -774,7 +774,7 @@ app.addEventListener("click", async event => {
   if (event.target.closest("[data-action='confirm-reservation']")) return confirmReservation();
   if (event.target.closest("[data-action='share-pool']")) {
     const pool = await repository.getPoolState(currentPoolId);
-    const message = `${pool.pool.title}\n${matchName(pool.pool)}\nPartit: ${formatDateTime(pool.pool.matchAt)}\nTancament: ${formatDateTime(pool.pool.closesAt)}\nParticipa a Porra Live: ${location.origin}${location.pathname}?pool=${pool.pool.slug}`;
+    const message = `${pool.pool.title}\n${matchName(pool.pool)}\nPartit: ${formatDateTime(pool.pool.matchAt)}\nTancament: ${formatDateTime(pool.pool.closesAt)}\nParticipa a Porra JARVIS: ${location.origin}${location.pathname}?pool=${pool.pool.slug}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
   }
   const shareCopy = event.target.closest("[data-copy-share]");

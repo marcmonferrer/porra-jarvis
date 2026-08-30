@@ -1,8 +1,8 @@
-# Porra Live
+# Porra JARVIS
 
-Porra Live és una aplicació reutilitzable per crear, publicar i gestionar porres de diferents partits. L’administrador configura cada edició i els participants hi juguen sense registrar-se.
+Porra JARVIS és una aplicació reutilitzable per crear, publicar i gestionar porres de diferents partits. L’administrador configura cada edició i els participants hi juguen sense registrar-se.
 
-La versió actual inclou un mode demo local complet i un backend compartit amb Supabase. La prèvia automatitzada d’aquesta branca encara no s’ha desplegat.
+La versió actual inclou un mode demo local complet i un backend compartit amb Supabase. La prèvia estàndard és manual; la integració API-Football es conserva només com a experiment de backend i la UI normal no la invoca.
 
 ## Funcionalitats
 
@@ -31,11 +31,11 @@ La versió actual inclou un mode demo local complet i un backend compartit amb S
 
 ## Arquitectura
 
-Porra Live continua sent un frontend estàtic i responsive, sense procés de compilació obligatori:
+Porra JARVIS continua sent un frontend estàtic i responsive, sense procés de compilació obligatori:
 
 - `index.html`: shell i perfil públic.
 - `styles.css`: sistema visual responsive.
-- `social-card-porra-live.png`: previsualització social de la nova identitat.
+- `social-card-porra-live.png`: previsualització social; el nom de fitxer es conserva per compatibilitat amb la URL publicada.
 - `src/core.js`: regles de negoci, capacitat i motor de premis.
 - `src/repository.js`: adaptadors demo i Supabase, amb `supabase-js` fixat a `2.111.0`.
 - `src/match-preview.js`: presentació pública accessible dels snapshots automàtics i manuals.
@@ -151,6 +151,25 @@ La matriu remota completa està validada amb PostgreSQL real: permisos admin/no-
 
 La migració `20260830084619_add_personal_bet_recovery_links.sql` és la desena migració local i encara no s’ha aplicat a `porra-live-beta`. Fins a una activació remota separada, beta continua alineada 9/9 i el frontend de recuperació no s’ha de publicar.
 
+### Activació futura dels enllaços personals
+
+1. Enllaçar la CLI exclusivament a `vczrkalsqdzwitpqwdwc` i confirmar la identitat del projecte.
+2. Executar `npx supabase migration list` i `npx supabase db push --dry-run`; l’única migració pendent ha de ser `20260830084619_add_personal_bet_recovery_links.sql`.
+3. Revisar de nou RLS, grants, signatures i diff; aplicar una sola vegada amb `npx supabase db push` només amb una autorització separada.
+4. Validar en transaccions rollback-only token/hash, aïllament, errors uniformes, rollback i concurrència; executar advisors i confirmar zero residus.
+5. Només després de la validació remota, publicar el frontend i provar recuperació en el mateix navegador i en un altre dispositiu.
+
+### Canvi de nom extern pendent
+
+La identitat de producte és **Porra JARVIS**, però aquesta fase conserva el repositori `marcmonferrer/finalissima-porra`, el remote Git existent i la ruta pública `https://marcmonferrer.github.io/finalissima-porra/`. En una versió futura i separada:
+
+1. reservar i validar el slug desitjat `porra-jarvis`;
+2. inventariar enllaços del portfolio, README, invitacions guardades i metadades socials;
+3. preparar compatibilitat per als enllaços antics —redirect explícit o domini estable— abans de canviar la URL de GitHub Pages;
+4. reanomenar el repositori a GitHub, actualitzar el remote local i verificar clone/fetch/push;
+5. actualitzar la base de Pages, el canonical, el social card i els enllaços del portfolio/README;
+6. provar tant la URL nova com el comportament de tots els enllaços antics abans de retirar cap compatibilitat.
+
 ## Regles de preus i capacitat
 
 Valors per defecte:
@@ -211,8 +230,8 @@ El frontend manual només s’ha de publicar després d’aplicar i validar la m
 [LinkedIn](https://www.linkedin.com/in/marcmonferrer/) · [marcmonferrer.ai@gmail.com](mailto:marcmonferrer.ai@gmail.com)
 
 
-## Enllaç reutilitzable i regles completes (contractes actius a beta; frontend pendent de publicació)
+## Enllaç reutilitzable i regles completes (actius a la versió publicada)
 
 Aquest HEAD local afegeix un únic enllaç compartible per porra. El token de 256 bits només es retorna en crear o rotar, viatja al fragment #invite=, i la base només en desa SHA-256. Després d’una recàrrega, Administració mostra estat, data i usos agregats, però mai no recupera el secret. Les invitacions individuals anteriors continuen funcionant.
 
-La vista pública mostra Com funciona la porra abans de la graella i Administració reutilitza el mateix model com a Vista de les regles. El model deriva preu, tancament Europe/Madrid, límits, 25/50/25, especials, pagaments i redistribució de les constants que governen el motor. La nota i el contacte públic són opcionals, acotats i renderitzats com a text pla. Els contractes d’enllaç reutilitzable, regles configurables i reparació de l’estat de l’enllaç estan actius i validats a `porra-live-beta`; les 9 migracions estan alineades i no n’hi ha cap de pendent. El frontend d’aquesta versió continua pendent de publicació mitjançant el procés actual de GitHub.
+La vista pública mostra Com funciona la porra abans de la graella i Administració reutilitza el mateix model com a Vista de les regles. El model deriva preu, tancament Europe/Madrid, límits, 25/50/25, especials, pagaments i redistribució de les constants que governen el motor. La nota i el contacte públic són opcionals, acotats i renderitzats com a text pla. Els nou contractes remots d’enllaç reutilitzable, regles configurables i reparació de l’estat de l’enllaç estan actius, validats i alineats a `porra-live-beta`; la seva UI ja forma part de la versió publicada. La migració local de recuperació personal i el rebranding Porra JARVIS continuen pendents d’activació i publicació.

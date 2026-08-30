@@ -59,6 +59,6 @@ export function buildInvitationUrl({ baseUrl, poolSlug, invitationToken }) {
 }
 
 export function buildWhatsAppInvitationUrl({ invitationUrl, poolTitle }) {
-  const message = `${poolTitle}\nInvitació privada per participar a Porra Live:\n${invitationUrl}`;
+  const message = `${poolTitle}\nInvitació privada per participar a Porra JARVIS:\n${invitationUrl}`;
   return `https://wa.me/?text=${encodeURIComponent(message)}`;
 }

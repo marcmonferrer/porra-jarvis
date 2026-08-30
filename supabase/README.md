@@ -1,6 +1,6 @@
-# Backend Supabase de Porra Live
+# Backend Supabase de Porra JARVIS
 
-Les migracions versionades defineixen el backend compartit de Porra Live. Les nou primeres migracions estan aplicades i validades a `porra-live-beta`: l’historial remot està alineat 9/9. La desena migració de recuperació personal és nova, només local i pendent d’una activació separada; no s’ha aplicat en aquesta iteració.
+Les migracions versionades defineixen el backend compartit de Porra JARVIS. Les nou primeres migracions estan aplicades i validades a `porra-live-beta`: l’historial remot està alineat 9/9. La desena migració de recuperació personal és nova, només local i pendent d’una activació separada; no s’ha aplicat en aquesta iteració.
 
 ## Estat de migracions
 
@@ -17,7 +17,7 @@ Les migracions versionades defineixen el backend compartit de Porra Live. Les no
 | `migrations/20260828204032_fix_pool_share_link_status_lookup.sql` | `20260828204032` | Repara additivament la consulta d’estat de l’enllaç compartit i preserva autorització, contracte i permisos mínims. |
 | `migrations/20260830084619_add_personal_bet_recovery_links.sql` | Pendent (només local) | Afegeix capacitats privades de 256 bits per recuperar «La meva aposta» sense compte i conserva el tracking legacy. |
 
-Els nou contractes remots formen part de l’historial actiu de `porra-live-beta`, sense drift remot. En comparar aquest HEAD local, l’única migració nova esperada és `20260830084619_add_personal_bet_recovery_links.sql`. L’activació dels contractes existents no implica que el frontend d’aquesta versió ja estigui publicat a GitHub Pages.
+Els nou contractes remots formen part de l’historial actiu de `porra-live-beta`, sense drift remot, i la UI d’enllaç reutilitzable i regles ja és a la versió publicada. En comparar aquest HEAD local, l’única migració nova esperada és `20260830084619_add_personal_bet_recovery_links.sql`; la recuperació personal i el rebranding encara no estan publicats.
 
 ## Arquitectura demo i Supabase
 
@@ -162,4 +162,4 @@ El frontend està configurat únicament amb la URL i la clau publishable de `por
 
 Les RPC noves exigeixen `private.require_porra_admin()`, `search_path = ''`, noms qualificats, revocació explícita i `EXECUTE` només per `authenticated`. La taula privada continua sense grants directes. El token de 256 bits només es retorna al crear o rotar, la base desa SHA-256, i ús, rotació, límit per nom normalitzat i capacitat de casella es resolen dins de la transacció.
 
-La projecció pública nova només inclou nota i contacte explícitament configurats; no exposa hashes, tokens, instruccions de pagament, UUID ni dades de participants. Les tres migracions d’aquesta secció estan aplicades i validades a `porra-live-beta`; el frontend corresponent continua pendent de la publicació actual a GitHub.
+La projecció pública nova només inclou nota i contacte explícitament configurats; no exposa hashes, tokens, instruccions de pagament, UUID ni dades de participants. Les tres migracions d’aquesta secció estan aplicades i validades a `porra-live-beta`, i el frontend corresponent ja forma part de la versió publicada.
