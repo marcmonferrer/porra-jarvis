@@ -338,17 +338,21 @@ async function confirmReservation() {
   const name = input?.value.trim();
   if (!name) return notify("Escriu el nom del participant.", "error");
   view = "reservation-submitting";
+  const existingRecoveryToken = lastRecoveryPoolId === currentPoolId
+    ? lastRecoveryToken
+    : personalBetCapture.access.get(currentPoolId);
   try {
     const result = await repository.createReservation({
       poolId: currentPoolId,
       name,
       cellKeys: selectedCells,
-      invitationToken: repository.mode === "supabase" ? invitation.value() : undefined
+      invitationToken: repository.mode === "supabase" ? invitation.value() : undefined,
+      recoveryToken: existingRecoveryToken || undefined
     });
     invitation.clear();
     invitationNotice = "used";
-    lastTrackingToken = result.token || result.tracking_token;
-    lastRecoveryToken = result.recoveryToken || result.recovery_token || "";
+    lastTrackingToken = result.token || result.tracking_token || lastTrackingToken;
+    lastRecoveryToken = result.recoveryToken || result.recovery_token || existingRecoveryToken || "";
     lastRecoveryPoolId = currentPoolId || "";
     if (lastRecoveryToken) personalBetCapture.access.save(lastRecoveryPoolId, lastRecoveryToken);
     personalBetNotice = "";

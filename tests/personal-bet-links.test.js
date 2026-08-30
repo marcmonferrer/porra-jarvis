@@ -103,7 +103,7 @@ test("el camp manual accepta URL personal, token contextual i tracking legacy", 
   assert.equal(INVALID_PERSONAL_BET_MESSAGE, "No s’ha pogut recuperar aquesta aposta.");
 });
 
-test("DemoRepository conserva dues apostes, restaura i rebutja l’ús en una altra porra", async () => {
+test("DemoRepository crea una capacitat, reutilitza participant i recupera les dues apostes", async () => {
   const storage = memoryStorage();
   const repository = new DemoRepository(storage);
   const pool = await repository.savePool({
@@ -112,15 +112,71 @@ test("DemoRepository conserva dues apostes, restaura i rebutja l’ús en una al
     price: 4, poolPerBet: 3.5, fee: .5
   });
   await repository.publishPool(pool.id);
-  const reservation = await repository.createReservation({ poolId: pool.id, name: "Marc", cellKeys: ["1-0", "2-1"] });
-  assert.match(reservation.recoveryToken, /^[0-9a-f]{64}$/);
-  const restored = await repository.getPersonalBet(pool.slug, reservation.recoveryToken);
+
+  const first = await repository.createReservation({
+    poolId: pool.id,
+    name: "Marc",
+    cellKeys: ["1-0"]
+  });
+  assert.match(first.recoveryToken, /^[0-9a-f]{64}$/);
+  assert.equal(repository.data.participants.length, 1);
+
+  await assert.rejects(
+    repository.createReservation({ poolId: pool.id, name: "Marc", cellKeys: ["2-1"] }),
+    error => error.message === INVALID_PERSONAL_BET_MESSAGE
+  );
+  assert.equal(repository.data.participants.length, 1);
+  assert.equal(repository.data.participants[0].recoveryToken, first.recoveryToken);
+
+  const second = await repository.createReservation({
+    poolId: pool.id,
+    name: "Marc",
+    cellKeys: ["2-1"],
+    recoveryToken: first.recoveryToken
+  });
+  assert.equal(second.participant.id, first.participant.id);
+  assert.equal(Object.hasOwn(second, "recoveryToken"), false);
+  assert.equal(repository.data.participants.length, 1);
+
+  const restored = await repository.getPersonalBet(pool.slug, first.recoveryToken);
   assert.equal(restored.participant.name, "Marc");
   assert.deepEqual(restored.bets.map(bet => bet.cellKey), ["1-0", "2-1"]);
   assert.deepEqual(restored.bets.map(bet => bet.paymentStatus), ["pending", "pending"]);
-  assert.equal(await repository.getPersonalBet("wrong-pool", reservation.recoveryToken), null);
+  assert.equal(await repository.getPersonalBet("wrong-pool", first.recoveryToken), null);
+
+  await assert.rejects(
+    repository.createReservation({
+      poolId: pool.id,
+      name: "Marc",
+      cellKeys: ["3-2"],
+      recoveryToken: first.recoveryToken
+    }),
+    /màxim de dues apostes/
+  );
+
   const reloaded = new DemoRepository(storage);
-  assert.equal((await reloaded.getPersonalBet(pool.slug, reservation.recoveryToken)).bets.length, 2);
+  assert.equal((await reloaded.getPersonalBet(pool.slug, first.recoveryToken)).bets.length, 2);
+});
+
+test("dos primers intents concurrents no creen participants ni capacitats duplicats", async () => {
+  const storage = memoryStorage();
+  const repository = new DemoRepository(storage);
+  const pool = await repository.savePool({
+    title: "QA concurrent", homeTeam: "Local", awayTeam: "Visitant",
+    matchAt: "2099-09-01T19:00:00.000Z", closesAt: "2099-09-01T17:30:00.000Z",
+    price: 4, poolPerBet: 3.5, fee: .5
+  });
+  await repository.publishPool(pool.id);
+
+  const attempts = await Promise.allSettled([
+    repository.createReservation({ poolId: pool.id, name: "Concurrent", cellKeys: ["0-0"] }),
+    repository.createReservation({ poolId: pool.id, name: "Concurrent", cellKeys: ["0-1"] })
+  ]);
+  assert.equal(attempts.filter(result => result.status === "fulfilled").length, 1);
+  assert.equal(attempts.filter(result => result.status === "rejected").length, 1);
+  assert.equal(repository.data.participants.length, 1);
+  assert.equal(repository.data.bets.length, 1);
+  assert.match(repository.data.participants[0].recoveryToken, /^[0-9a-f]{64}$/);
 });
 
 test("SupabaseRepository envia només slug i capacitat a la RPC personal", async () => {
@@ -151,5 +207,7 @@ test("la UI integra captura primerenca, estat local, còpia accessible i missatg
   assert.match(source, /Si has esborrat les dades del navegador/);
   assert.match(source, /repository\.getPersonalBet/);
   assert.match(source, /repository\.getTracking/);
+  assert.match(source, /recoveryToken: existingRecoveryToken \|\| undefined/);
+  assert.match(source, /result\.recoveryToken \|\| result\.recovery_token \|\| existingRecoveryToken/);
   assert.doesNotMatch(source, /console\.|analytics|telemetry/);
 });

@@ -57,6 +57,8 @@ Quan s’activi la migració local nova, `anon` i `authenticated` també podran 
 
 La capacitat personal no és una invitació. `#invite=` continua sent l’única autorització per crear una reserva; `#mybet=` només recupera una reserva existent. La creació del participant, la capacitat personal, les apostes i l’ús de la invitació comparteixen la mateixa transacció, de manera que qualsevol error posterior ho reverteix tot.
 
+`create_public_reservation_with_recovery` té un nom únic i rep la capacitat personal opcional. La primera reserva crea participant i token; una reserva posterior amb el token vàlid reutilitza el mateix participant, no genera ni retorna cap altre secret i queda subjecta al límit total de dues apostes. La RPC històrica de quatre arguments es conserva com a wrapper compatible per a primeres reserves, però rebutja una segona reserva nova si existeix una capacitat activa i el client no la presenta.
+
 Administratives i atòmiques:
 
 - `admin_update_reservation`: actualitza nom i totes les seleccions o reverteix completament.

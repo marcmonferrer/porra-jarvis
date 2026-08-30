@@ -142,12 +142,13 @@ La matriu remota completa està validada amb PostgreSQL real: permisos admin/no-
 
 ### Recuperació personal de l’aposta (només local, pendent d’activació)
 
-- Una reserva nova genera atòmicament una capacitat independent de 32 bytes i la retorna una sola vegada com a fragment `?pool=<slug>#mybet=<token>`.
+- La primera reserva confirmada genera atòmicament una capacitat independent de 32 bytes i la retorna una sola vegada com a fragment `?pool=<slug>#mybet=<token>`. La mateixa reserva pot contenir una o dues apostes.
 - El fragment es llegeix abans d’inicialitzar el repositori, es desa per slug a `localStorage` amb la clau `porra-jarvis-personal-bet-links-v1` i s’elimina immediatament de l’URL visible amb `history.replaceState`.
 - La base només desa SHA-256 a `private.participant_recovery_tokens`, amb RLS, sense grants directes i amb una sola capacitat activa per participant i porra.
 - `get_personal_bet_state` és una lectura allowlisted: retorna només la porra, el nom voluntari, les apostes pròpies, l’estat de pagament, el partit, els premis i les instruccions de pagament protegides. No retorna UUID, hashes, secrets ni dades d’altres participants.
 - Token mal format, desconegut, revocat, expirat o d’una altra porra produeix el mateix missatge públic. Les reserves i tokens de tracking anteriors continuen funcionant sense backfill.
 - L’enllaç reutilitzable `#invite=` autoritza crear una participació; l’enllaç personal `#mybet=` només permet consultar la participació ja creada i no substitueix mai la invitació.
+- Si el participant afegeix posteriorment la segona aposta, ha de tornar a entrar amb l’enllaç general i conservar localment la seva capacitat personal. La RPC nova associa l’aposta al mateix `participant_id`, no crea ni retorna un segon token, i l’enllaç original mostra totes dues apostes. Sense la capacitat personal es respon amb el mateix error genèric.
 
 La migració `20260830084619_add_personal_bet_recovery_links.sql` és la desena migració local i encara no s’ha aplicat a `porra-live-beta`. Fins a una activació remota separada, beta continua alineada 9/9 i el frontend de recuperació no s’ha de publicar.
 
