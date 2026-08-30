@@ -120,6 +120,7 @@ Consulta [supabase/README.md](supabase/README.md) per al model i el desplegament
 - La base de dades limita dues apostes actives per participant i dues places per casella.
 - El públic no pot modificar pagaments, resultats ni premis.
 - L’enllaç privat conté un token aleatori; a la base de dades només se’n desa el hash SHA-256.
+- Les reserves noves poden retornar una capacitat personal de 256 bits, diferent de l’enllaç d’invitació: el navegador la conserva per porra per recuperar «La meva aposta», mentre PostgreSQL només en desa SHA-256.
 - Realtime publica només `pool_revisions`, amb slug, revisió i timestamp; no publica apostes, participants, UUID, pagaments, marcadors ni premis.
 - Les operacions compostes `updateReservation`, `updateMatch` i `finalizePool` passen per RPC administratives atòmiques.
 - No hi ha telèfons, Bizum, credencials ni secrets personals al repositori.
@@ -138,6 +139,17 @@ La matriu remota completa està validada amb PostgreSQL real: permisos admin/no-
 - Després d’un èxit, una invitació invàlida o un error terminal de porra/fase, la còpia en memòria s’elimina. Els errors d’invitació mostren sempre el mateix missatge públic.
 - El token de tracking i `paymentInstructions` conserven el comportament privat existent.
 - A Administració, la pestanya Invitacions crea, llista i revoca invitacions. El secret només apareix en la resposta de creació, dins de l’enllaç copiable i compartible per WhatsApp; els llistats només mostren dates i estat.
+
+### Recuperació personal de l’aposta (només local, pendent d’activació)
+
+- Una reserva nova genera atòmicament una capacitat independent de 32 bytes i la retorna una sola vegada com a fragment `?pool=<slug>#mybet=<token>`.
+- El fragment es llegeix abans d’inicialitzar el repositori, es desa per slug a `localStorage` amb la clau `porra-jarvis-personal-bet-links-v1` i s’elimina immediatament de l’URL visible amb `history.replaceState`.
+- La base només desa SHA-256 a `private.participant_recovery_tokens`, amb RLS, sense grants directes i amb una sola capacitat activa per participant i porra.
+- `get_personal_bet_state` és una lectura allowlisted: retorna només la porra, el nom voluntari, les apostes pròpies, l’estat de pagament, el partit, els premis i les instruccions de pagament protegides. No retorna UUID, hashes, secrets ni dades d’altres participants.
+- Token mal format, desconegut, revocat, expirat o d’una altra porra produeix el mateix missatge públic. Les reserves i tokens de tracking anteriors continuen funcionant sense backfill.
+- L’enllaç reutilitzable `#invite=` autoritza crear una participació; l’enllaç personal `#mybet=` només permet consultar la participació ja creada i no substitueix mai la invitació.
+
+La migració `20260830084619_add_personal_bet_recovery_links.sql` és la desena migració local i encara no s’ha aplicat a `porra-live-beta`. Fins a una activació remota separada, beta continua alineada 9/9 i el frontend de recuperació no s’ha de publicar.
 
 ## Regles de preus i capacitat
 

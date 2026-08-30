@@ -1,6 +1,6 @@
 # Backend Supabase de Porra Live
 
-Les migracions versionades defineixen el backend compartit de Porra Live. Les nou migracions estan aplicades i validades a `porra-live-beta`: l’historial local i remot està alineat 9/9 i no hi ha cap migració pendent.
+Les migracions versionades defineixen el backend compartit de Porra Live. Les nou primeres migracions estan aplicades i validades a `porra-live-beta`: l’historial remot està alineat 9/9. La desena migració de recuperació personal és nova, només local i pendent d’una activació separada; no s’ha aplicat en aquesta iteració.
 
 ## Estat de migracions
 
@@ -15,8 +15,9 @@ Les migracions versionades defineixen el backend compartit de Porra Live. Les no
 | `migrations/20260828195016_add_reusable_pool_share_links.sql` | `20260828195016` | Afegeix un únic enllaç reutilitzable per porra, rotació, revocació i comptador d’usos sense exposar el secret. |
 | `migrations/20260828200050_add_complete_configurable_pool_rules.sql` | `20260828200050` | Afegeix nota i contacte opcionals i amplia la projecció pública sanejada de les regles. |
 | `migrations/20260828204032_fix_pool_share_link_status_lookup.sql` | `20260828204032` | Repara additivament la consulta d’estat de l’enllaç compartit i preserva autorització, contracte i permisos mínims. |
+| `migrations/20260830084619_add_personal_bet_recovery_links.sql` | Pendent (només local) | Afegeix capacitats privades de 256 bits per recuperar «La meva aposta» sense compte i conserva el tracking legacy. |
 
-Els nou contractes formen part de l’historial actiu de `porra-live-beta`, sense drift ni migracions pendents. L’activació d’aquests contractes no implica que el frontend d’aquesta versió ja estigui publicat a GitHub Pages.
+Els nou contractes remots formen part de l’historial actiu de `porra-live-beta`, sense drift remot. En comparar aquest HEAD local, l’única migració nova esperada és `20260830084619_add_personal_bet_recovery_links.sql`. L’activació dels contractes existents no implica que el frontend d’aquesta versió ja estigui publicat a GitHub Pages.
 
 ## Arquitectura demo i Supabase
 
@@ -51,6 +52,10 @@ Públiques:
 - `create_public_reservation(target_pool_id, participant_name, selected_cells, invitation_token)`: reserva transaccional amb invitació individual, bloquejos per casella, límits de capacitat, tancament i fase. La resposta conserva el token de tracking i les instruccions de pagament privades.
 - `get_public_pool_state`: estat sanejat sense UUID, tracking, correu, telèfon, instruccions de pagament ni reserves pendents identificables.
 - `get_tracking_state`: estat individual protegit pel token aleatori; a la base només se’n conserva el hash SHA-256.
+
+Quan s’activi la migració local nova, `anon` i `authenticated` també podran executar `get_personal_bet_state(pool_identifier, raw_recovery_token)`. Aquesta RPC read-only exigeix una capacitat hexadecimal lowercase de 64 caràcters, en compara només el SHA-256 i projecta exclusivament la participació vinculada. La taula `private.participant_recovery_tokens` manté RLS activat, zero polítiques i zero grants directes. No hi ha backfill: `get_tracking_state` conserva íntegrament els participants anteriors.
+
+La capacitat personal no és una invitació. `#invite=` continua sent l’única autorització per crear una reserva; `#mybet=` només recupera una reserva existent. La creació del participant, la capacitat personal, les apostes i l’ús de la invitació comparteixen la mateixa transacció, de manera que qualsevol error posterior ho reverteix tot.
 
 Administratives i atòmiques:
 

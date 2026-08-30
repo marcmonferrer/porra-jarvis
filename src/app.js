@@ -38,6 +38,12 @@ import {
   isInvalidInvitationError,
   isTerminalReservationError
 } from "./invitations.js";
+import {
+  INVALID_PERSONAL_BET_MESSAGE,
+  buildPersonalBetUrl,
+  capturePersonalBetAccessFromUrl,
+  parsePersonalBetInput
+} from "./personal-bet-links.js";
 import { createAdminPoolCreationFlow, resolveAdminPoolView } from "./admin-pool-creation.js";
 import { adminShareLinkMarkup, buildPoolShareUrl, copyShareLink } from "./share-links.js";
 import { matchPreviewMarkup } from "./match-preview.js";
@@ -51,13 +57,21 @@ import { createRepository } from "./repository.js";
 const app = document.querySelector("#app");
 const toast = document.querySelector("[data-toast]");
 const config = window.PORRA_LIVE_CONFIG || { mode: "demo" };
+const personalBetCapture = capturePersonalBetAccessFromUrl({
+  location,
+  history: window.history,
+  storage: globalThis.localStorage
+});
 const invitation = captureInvitationFromUrl({ location, history: window.history });
 const repository = await createRepository(config);
 
-let view = invitation.detected ? "public" : location.hash.replace("#", "") || "public";
 let currentPoolId = new URLSearchParams(location.search).get("pool");
+let view = personalBetCapture.detected ? "tracking" : invitation.detected ? "public" : location.hash.replace("#", "") || "public";
 let selectedCells = [];
-let lastTrackingToken = new URLSearchParams(location.search).get("track") || "";
+let lastRecoveryPoolId = personalBetCapture.poolSlug || currentPoolId || "";
+let lastRecoveryToken = personalBetCapture.token || personalBetCapture.access.get(lastRecoveryPoolId);
+let lastTrackingToken = personalBetCapture.legacyToken;
+let personalBetNotice = personalBetCapture.personalDetected && !personalBetCapture.valid ? "invalid" : "";
 let invitationNotice = invitation.valid ? "detected" : invitation.detected ? "invalid" : "missing";
 let lastCreatedInvitation = null;
 let lastCreatedShareLink = null;
@@ -334,16 +348,24 @@ async function confirmReservation() {
     invitation.clear();
     invitationNotice = "used";
     lastTrackingToken = result.token || result.tracking_token;
+    lastRecoveryToken = result.recoveryToken || result.recovery_token || "";
+    lastRecoveryPoolId = currentPoolId || "";
+    if (lastRecoveryToken) personalBetCapture.access.save(lastRecoveryPoolId, lastRecoveryToken);
+    personalBetNotice = "";
     selectedCells = [];
     view = "reservation-success";
     const state = await repository.getPoolState(currentPoolId);
-    const trackUrl = `${location.origin}${location.pathname}?track=${encodeURIComponent(lastTrackingToken)}#tracking`;
+    lastRecoveryPoolId = state.pool.slug || lastRecoveryPoolId;
+    if (lastRecoveryToken) personalBetCapture.access.save(lastRecoveryPoolId, lastRecoveryToken);
+    const personalUrl = lastRecoveryToken
+      ? buildPersonalBetUrl({ baseUrl: `${location.origin}${location.pathname}`, poolSlug: lastRecoveryPoolId, recoveryToken: lastRecoveryToken })
+      : `${location.origin}${location.pathname}?track=${encodeURIComponent(lastTrackingToken)}#tracking`;
     app.innerHTML = `${hero(state.pool, state.match)}<section class="success-state panel">
       <span class="success-icon">✓</span><p class="eyebrow">Reserva creada</p><h2>Pendent de verificar pagament</h2>
       <p>Has reservat ${result.bets?.length || 0} ${result.bets?.length === 1 ? "aposta" : "apostes"} per un total de <strong>${formatMoney((result.bets?.length || 0) * state.pool.priceCents)}</strong>.</p>
       <div class="payment-box"><strong>Instruccions de pagament</strong><p>${escapeHtml(result.paymentInstructions || "L’administrador encara no ha configurat les instruccions.")}</p></div>
-      <p>Desa aquest enllaç privat per consultar l’estat des de qualsevol dispositiu:</p>
-      <div class="private-link"><input readonly value="${escapeHtml(trackUrl)}" aria-label="Enllaç privat de seguiment"><button class="button" data-copy="${escapeHtml(trackUrl)}">Copiar</button></div>
+      <div class="personal-recovery"><h3>Guarda el teu enllaç personal</h3><p>Aquest enllaç et permet consultar les teves apostes des d’un altre dispositiu. No el comparteixis.</p>
+      <div class="private-link"><input readonly value="${escapeHtml(personalUrl)}" aria-label="Enllaç personal de La meva aposta"><button class="button" type="button" data-copy-personal="${escapeHtml(personalUrl)}">Copiar el meu enllaç</button></div><p class="sr-status" role="status" aria-live="polite" data-personal-copy-status></p></div>
       <button class="button primary" data-view="tracking">Veure la meva aposta</button>
     </section>`;
   } catch (error) {
@@ -593,16 +615,36 @@ function historyMarkup(states) {
 }
 
 async function renderTracking() {
-  const token = lastTrackingToken;
-  if (!token) {
-    app.innerHTML = `<section class="tracking-entry panel"><span class="eyebrow">Keeping track</span><h1>Consulta la teva aposta</h1><p>Enganxa l’identificador o l’enllaç privat que vas rebre en confirmar.</p><form data-form="tracking"><label>Identificador privat<input name="token" autocomplete="off" required></label><button class="button primary">Consultar</button></form></section>`;
+  const recoveryPoolId = lastRecoveryPoolId || currentPoolId || "";
+  const recoveryToken = lastRecoveryToken || personalBetCapture.access.get(recoveryPoolId);
+  const legacyToken = lastTrackingToken;
+  if (personalBetNotice === "invalid") {
+    app.innerHTML = `<section class="error-state panel"><h1>Enllaç personal no vàlid</h1><p>${escapeHtml(INVALID_PERSONAL_BET_MESSAGE)}</p><button class="button" data-action="clear-tracking">Tornar-ho a provar</button></section>`;
     return;
   }
-  const tracking = await repository.getTracking(token);
+  if (!recoveryToken && !legacyToken) {
+    app.innerHTML = `<section class="tracking-entry panel"><span class="eyebrow">Accés privat</span><h1>Consulta la teva aposta</h1><p>Obre el teu enllaç personal o enganxa’l aquí.</p><form data-form="tracking"><label>Enllaç o identificador privat<input name="token" autocomplete="off" required></label><button class="button primary">Consultar</button></form><p class="privacy-note">Si has esborrat les dades del navegador i no vas guardar l’enllaç personal, no es pot recuperar automàticament.</p></section>`;
+    return;
+  }
+  const tracking = recoveryToken
+    ? await repository.getPersonalBet(recoveryPoolId, recoveryToken)
+    : await repository.getTracking(legacyToken);
   if (!tracking) {
-    app.innerHTML = `<section class="error-state panel"><h1>No hem trobat aquesta participació</h1><p>Comprova que l’enllaç privat sigui complet.</p><button class="button" data-action="clear-tracking">Tornar-ho a provar</button></section>`;
+    if (recoveryToken) personalBetCapture.access.remove(recoveryPoolId);
+    lastRecoveryToken = "";
+    lastTrackingToken = "";
+    personalBetNotice = "invalid";
+    app.innerHTML = `<section class="error-state panel"><h1>Enllaç personal no vàlid</h1><p>${escapeHtml(INVALID_PERSONAL_BET_MESSAGE)}</p><button class="button" data-action="clear-tracking">Tornar-ho a provar</button></section>`;
     return;
   }
+  if (recoveryToken) {
+    lastRecoveryPoolId = tracking.pool.slug || recoveryPoolId;
+    lastRecoveryToken = recoveryToken;
+    personalBetCapture.access.save(lastRecoveryPoolId, recoveryToken);
+  }
+  const personalUrl = recoveryToken
+    ? buildPersonalBetUrl({ baseUrl: `${location.origin}${location.pathname}`, poolSlug: lastRecoveryPoolId, recoveryToken })
+    : "";
   const total = tracking.bets.reduce((sum, bet) => sum + tracking.pool.priceCents, 0);
   const participation = participationState({ pool: tracking.pool, match: tracking.match });
   const chance = bet => {
@@ -622,6 +664,7 @@ async function renderTracking() {
     <div class="payment-box"><strong>Instruccions de pagament</strong><p>${escapeHtml(tracking.pool.paymentInstructions || "L’administrador encara no ha configurat les instruccions.")}</p></div>
     <div class="tracking-bets">${tracking.bets.map(bet => { const halfState = trackingHalfTimeState({ pool: tracking.pool, match: tracking.match, bet }); const finalState = trackingFinalState({ pool: tracking.pool, match: tracking.match, bet }); return `<article><div><strong>${escapeHtml(cellLabel(tracking.pool, bet.cellKey))}</strong><span class="payment-status ${bet.paymentStatus}">${paymentLabel(bet.paymentStatus)}</span></div><dl><div><dt>Estat</dt><dd>${bet.paymentStatus === "paid" ? "Participa en els premis" : bet.paymentStatus === "pending" ? "Pendent de verificar pagament" : "Reserva alliberada"}</dd></div><div><dt>Descans</dt><dd>${halfState.label}${halfState.won ? ` · ${formatMoney(bet.halfPrizeCents)}` : ""}</dd></div>${tracking.match.phase === "final" ? `<div><dt>Resultat final</dt><dd>${finalState.finalLabel}${finalState.finalWon ? ` · ${formatMoney(bet.finalPrizeCents)}` : ""}</dd></div><div><dt>Especial</dt><dd>${finalState.specialLabel}${finalState.specialWon ? ` · ${formatMoney(bet.specialPrizeCents)}` : ""}</dd></div>${bet.redistributionPrizeCents ? `<div><dt>Redistribució</dt><dd>${formatMoney(bet.redistributionPrizeCents)}</dd></div>` : ""}` : ""}<div><dt>Opcions</dt><dd>${chance(bet)}</dd></div><div><dt>${tracking.match.phase === "final" ? "Premi total" : `Premi ${tracking.final ? "definitiu" : "provisional"}`}</dt><dd>${formatMoney(bet.prizeCents || 0)}</dd></div></dl></article>`; }).join("")}</div>
     ${liveMarkup({ pool: tracking.pool, match: tracking.match })}
+    ${personalUrl ? `<div class="personal-recovery compact"><strong>Guarda el teu enllaç personal</strong><p>Aquest enllaç et permet tornar a consultar les apostes des d’un altre dispositiu.</p><button class="button" type="button" data-copy-personal="${escapeHtml(personalUrl)}">Copiar el meu enllaç</button><p class="sr-status" role="status" aria-live="polite" data-personal-copy-status></p></div>` : ""}
     <p class="privacy-note">Aquest enllaç és privat. No el comparteixis públicament.</p></section>`;
 }
 
@@ -757,6 +800,14 @@ app.addEventListener("click", async event => {
     await renderAdmin();
     return;
   }
+  const personalCopy = event.target.closest("[data-copy-personal]");
+  if (personalCopy) {
+    const copied = await copyShareLink(personalCopy.dataset.copyPersonal, { clipboard: navigator.clipboard });
+    const status = app.querySelector("[data-personal-copy-status]");
+    if (status) status.textContent = copied ? "Enllaç personal copiat" : "No s’ha pogut copiar l’enllaç personal.";
+    notify(copied ? "Enllaç personal copiat" : "No s’ha pogut copiar l’enllaç personal.", copied ? "success" : "error");
+    return;
+  }
   const invitationWhatsApp = event.target.closest("[data-invitation-whatsapp]");
   if (invitationWhatsApp) {
     window.open(invitationWhatsApp.dataset.invitationWhatsapp, "_blank", "noopener,noreferrer");
@@ -815,7 +866,13 @@ app.addEventListener("click", async event => {
     try { await repository.finalizePool(currentPoolId); notify("Premis publicats i porra finalitzada."); await renderAdmin(); }
     catch (error) { notify(error.message, "error"); }
   }
-  if (event.target.closest("[data-action='clear-tracking']")) { lastTrackingToken = ""; await renderTracking(); }
+  if (event.target.closest("[data-action='clear-tracking']")) {
+    personalBetCapture.access.remove(lastRecoveryPoolId || currentPoolId || "");
+    lastRecoveryToken = "";
+    lastTrackingToken = "";
+    personalBetNotice = "";
+    await renderTracking();
+  }
   if (event.target.closest("[data-action='admin-logout']")) { lastCreatedInvitation = null; manualMatchPreviewController.load(null); await repository.signOut(); notify("Sessió tancada."); await renderAdmin(); }
   if (event.target.closest("[data-action='retry']")) await render();
 });
@@ -866,7 +923,22 @@ app.addEventListener("submit", async event => {
       notify("Invitació creada. Copia l’enllaç ara.");
       await renderAdmin();
     }
-    if (form.dataset.form === "tracking") { lastTrackingToken = new FormData(form).get("token").trim(); await renderTracking(); }
+    if (form.dataset.form === "tracking") {
+      const parsed = parsePersonalBetInput(new FormData(form).get("token"), currentPoolId || "");
+      if (!parsed) throw new Error(INVALID_PERSONAL_BET_MESSAGE);
+      personalBetNotice = "";
+      if (parsed.kind === "personal") {
+        currentPoolId = parsed.poolSlug;
+        lastRecoveryPoolId = parsed.poolSlug;
+        lastRecoveryToken = parsed.token;
+        lastTrackingToken = "";
+        personalBetCapture.access.save(parsed.poolSlug, parsed.token);
+      } else {
+        lastTrackingToken = parsed.token;
+        lastRecoveryToken = "";
+      }
+      await renderTracking();
+    }
     if (form.dataset.form === "reservation") {
       const data = new FormData(form);
       const bets = [...form.querySelectorAll("[data-reservation-bet]")].map(select => ({ id: select.dataset.reservationBet, cellKey: select.value }));

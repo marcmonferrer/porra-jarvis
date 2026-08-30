@@ -9,6 +9,7 @@ import {
 } from "./core.js";
 import { participationState } from "./public-experience.js";
 import { createDemoMatchPreview } from "./match-preview.js";
+import { generateSecureRecoveryToken, isValidPersonalBetToken } from "./personal-bet-links.js";
 
 export const BETA_SUPABASE_URL = "https://vczrkalsqdzwitpqwdwc.supabase.co";
 export const ADMIN_POOL_SELECT = "*, special_bets!special_bets_pool_id_fkey(*)";
@@ -182,12 +183,14 @@ export class DemoRepository {
     });
     if (!validation.valid) throw new Error(validation.errors[0]);
     const token = trackingToken();
+    const recoveryToken = generateSecureRecoveryToken();
     const participant = {
       id: participantId,
       poolId,
       name: name.trim(),
       normalizedName,
       trackingToken: token,
+      recoveryToken,
       createdAt: new Date().toISOString()
     };
     const bets = cellKeys.map(cellKey => ({
@@ -201,7 +204,7 @@ export class DemoRepository {
     this.data.participants.push(participant);
     this.data.bets.push(...bets);
     this.write();
-    return { participant, bets, token };
+    return { participant, bets, token, recoveryToken };
   }
 
   async getTracking(token) {
@@ -222,6 +225,23 @@ export class DemoRepository {
     };
   }
 
+  async getPersonalBet(poolIdOrSlug, token) {
+    if (!isValidPersonalBetToken(token)) return null;
+    const participant = this.data.participants.find(person => person.recoveryToken === token);
+    if (!participant) return null;
+    const pool = await this.getPool(participant.poolId);
+    if (!pool || (pool.id !== poolIdOrSlug && pool.slug !== poolIdOrSlug)) return null;
+    const state = await this.getPoolState(participant.poolId);
+    const bets = state.bets.filter(bet => bet.participantId === participant.id);
+    const preview = state.prizeResult || calculatePrizes({ pool: state.pool, bets: state.bets, match: state.match });
+    return {
+      pool: state.pool,
+      participant,
+      bets: bets.map(bet => ({ ...bet, ...trackingPrizeFields(preview, bet.id) })),
+      match: state.match,
+      final: state.pool.status === "finished"
+    };
+  }
   async updateBet(betId, patch) {
     const bet = this.data.bets.find(item => item.id === betId);
     if (!bet) throw new Error("No s'ha trobat l'aposta.");
@@ -586,6 +606,16 @@ export class SupabaseRepository {
       target_invitation_id: invitationId
     });
     if (error) throw error;
+    return data;
+  }
+
+  async getPersonalBet(poolIdOrSlug, token) {
+    if (!isValidPersonalBetToken(token)) return null;
+    const { data, error } = await this.client.rpc("get_personal_bet_state", {
+      pool_identifier: poolIdOrSlug,
+      raw_recovery_token: token
+    });
+    if (error) throw new Error("No s’ha pogut recuperar aquesta aposta.");
     return data;
   }
 
