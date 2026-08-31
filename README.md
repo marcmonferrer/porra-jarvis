@@ -140,7 +140,7 @@ La matriu remota completa està validada amb PostgreSQL real: permisos admin/no-
 - El token de tracking i `paymentInstructions` conserven el comportament privat existent.
 - A Administració, la pestanya Invitacions crea, llista i revoca invitacions. El secret només apareix en la resposta de creació, dins de l’enllaç copiable i compartible per WhatsApp; els llistats només mostren dates i estat.
 
-### Recuperació personal de l’aposta (només local, pendent d’activació)
+### Recuperació personal de l’aposta (backend beta actiu; frontend pendent de publicació)
 
 - La primera reserva confirmada genera atòmicament una capacitat independent de 32 bytes i la retorna una sola vegada com a fragment `?pool=<slug>#mybet=<token>`. La mateixa reserva pot contenir una o dues apostes.
 - El fragment es llegeix abans d’inicialitzar el repositori, es desa per slug a `localStorage` amb la clau `porra-jarvis-personal-bet-links-v1` i s’elimina immediatament de l’URL visible amb `history.replaceState`.
@@ -150,15 +150,15 @@ La matriu remota completa està validada amb PostgreSQL real: permisos admin/no-
 - L’enllaç reutilitzable `#invite=` autoritza crear una participació; l’enllaç personal `#mybet=` només permet consultar la participació ja creada i no substitueix mai la invitació.
 - Si el participant afegeix posteriorment la segona aposta, ha de tornar a entrar amb l’enllaç general i conservar localment la seva capacitat personal. La RPC nova associa l’aposta al mateix `participant_id`, no crea ni retorna un segon token, i l’enllaç original mostra totes dues apostes. Sense la capacitat personal es respon amb el mateix error genèric.
 
-La migració `20260830084619_add_personal_bet_recovery_links.sql` és la desena migració local i encara no s’ha aplicat a `porra-live-beta`. Fins a una activació remota separada, beta continua alineada 9/9 i el frontend de recuperació no s’ha de publicar.
+Les migracions `20260830084619_add_personal_bet_recovery_links.sql` i `20260830093744_fix_personal_recovery_error_order.sql` estan aplicades i validades a `porra-live-beta`. L’historial local i remot està alineat 11/11, sense migracions pendents. La validació formal de concurrència va superar les tres curses —última plaça de casella, última entrada de participant i reutilització de capacitat personal alliberada— amb un únic commit i un únic rebuig esperats en cada cas, integritat final correcta i zero residus QA. El frontend de recuperació i el rebranding continuen sense publicar.
 
-### Activació futura dels enllaços personals
+### Estat d’activació dels enllaços personals
 
-1. Enllaçar la CLI exclusivament a `vczrkalsqdzwitpqwdwc` i confirmar la identitat del projecte.
-2. Executar `npx supabase migration list` i `npx supabase db push --dry-run`; l’única migració pendent ha de ser `20260830084619_add_personal_bet_recovery_links.sql`.
-3. Revisar de nou RLS, grants, signatures i diff; aplicar una sola vegada amb `npx supabase db push` només amb una autorització separada.
-4. Validar en transaccions rollback-only token/hash, aïllament, errors uniformes, rollback i concurrència; executar advisors i confirmar zero residus.
-5. Només després de la validació remota, publicar el frontend i provar recuperació en el mateix navegador i en un altre dispositiu.
+1. La CLI està enllaçada exclusivament a `vczrkalsqdzwitpqwdwc` i la identitat del projecte està confirmada.
+2. `npx supabase migration list` mostra 11/11 i `npx supabase db push --dry-run` mostra zero migracions pendents.
+3. RLS, grants, signatures, projeccions públiques i errors uniformes estan validats sense exposar tokens, hashes ni identitats.
+4. Rollback i les tres curses formals de concurrència estan validats amb zero residus sintètics; els advisors no mostren cap regressió bloquejant de la funcionalitat.
+5. El pas pendent és publicar el frontend i provar la recuperació en el mateix navegador i en un altre dispositiu. API-Football continua desactivada i no s’ha utilitzat en aquesta validació.
 
 ### Canvi de nom extern pendent
 
@@ -235,4 +235,4 @@ El frontend manual només s’ha de publicar després d’aplicar i validar la m
 
 Aquest HEAD local afegeix un únic enllaç compartible per porra. El token de 256 bits només es retorna en crear o rotar, viatja al fragment #invite=, i la base només en desa SHA-256. Després d’una recàrrega, Administració mostra estat, data i usos agregats, però mai no recupera el secret. Les invitacions individuals anteriors continuen funcionant.
 
-La vista pública mostra Com funciona la porra abans de la graella i Administració reutilitza el mateix model com a Vista de les regles. El model deriva preu, tancament Europe/Madrid, límits, 25/50/25, especials, pagaments i redistribució de les constants que governen el motor. La nota i el contacte públic són opcionals, acotats i renderitzats com a text pla. Els nou contractes remots d’enllaç reutilitzable, regles configurables i reparació de l’estat de l’enllaç estan actius, validats i alineats a `porra-live-beta`; la seva UI ja forma part de la versió publicada. La migració local de recuperació personal i el rebranding Porra JARVIS continuen pendents d’activació i publicació.
+La vista pública mostra Com funciona la porra abans de la graella i Administració reutilitza el mateix model com a Vista de les regles. El model deriva preu, tancament Europe/Madrid, límits, 25/50/25, especials, pagaments i redistribució de les constants que governen el motor. La nota i el contacte públic són opcionals, acotats i renderitzats com a text pla. Els contractes remots d’enllaç reutilitzable, regles configurables, reparació de l’estat de l’enllaç i recuperació personal estan actius, validats i alineats 11/11 a `porra-live-beta`; la UI d’enllaç reutilitzable i regles ja forma part de la versió publicada. El nou frontend de recuperació personal i el rebranding Porra JARVIS continuen pendents de publicació.

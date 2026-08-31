@@ -1,6 +1,6 @@
 # Backend Supabase de Porra JARVIS
 
-Les migracions versionades defineixen el backend compartit de Porra JARVIS. Les nou primeres migracions estan aplicades i validades a `porra-live-beta`: l’historial remot està alineat 9/9. La desena migració de recuperació personal és nova, només local i pendent d’una activació separada; no s’ha aplicat en aquesta iteració.
+Les migracions versionades defineixen el backend compartit de Porra JARVIS. Les onze migracions estan aplicades i validades a `porra-live-beta`: l’historial local i remot està alineat 11/11, sense migracions pendents.
 
 ## Estat de migracions
 
@@ -15,9 +15,10 @@ Les migracions versionades defineixen el backend compartit de Porra JARVIS. Les 
 | `migrations/20260828195016_add_reusable_pool_share_links.sql` | `20260828195016` | Afegeix un únic enllaç reutilitzable per porra, rotació, revocació i comptador d’usos sense exposar el secret. |
 | `migrations/20260828200050_add_complete_configurable_pool_rules.sql` | `20260828200050` | Afegeix nota i contacte opcionals i amplia la projecció pública sanejada de les regles. |
 | `migrations/20260828204032_fix_pool_share_link_status_lookup.sql` | `20260828204032` | Repara additivament la consulta d’estat de l’enllaç compartit i preserva autorització, contracte i permisos mínims. |
-| `migrations/20260830084619_add_personal_bet_recovery_links.sql` | Pendent (només local) | Afegeix capacitats privades de 256 bits per recuperar «La meva aposta» sense compte i conserva el tracking legacy. |
+| `migrations/20260830084619_add_personal_bet_recovery_links.sql` | `20260830084619` | Afegeix capacitats privades de 256 bits per recuperar «La meva aposta» sense compte i conserva el tracking legacy. |
+| `migrations/20260830093744_fix_personal_recovery_error_order.sql` | `20260830093744` | Reordena la validació de la capacitat personal per conservar l’error genèric sense filtrar l’existència ni el límit del participant. |
 
-Els nou contractes remots formen part de l’historial actiu de `porra-live-beta`, sense drift remot, i la UI d’enllaç reutilitzable i regles ja és a la versió publicada. En comparar aquest HEAD local, l’única migració nova esperada és `20260830084619_add_personal_bet_recovery_links.sql`; la recuperació personal i el rebranding encara no estan publicats.
+Els onze contractes remots formen part de l’historial actiu de `porra-live-beta`, sense drift ni migracions pendents, i la UI d’enllaç reutilitzable i regles ja és a la versió publicada. El backend de recuperació personal està actiu i validat, incloses les tres curses formals de concurrència amb integritat correcta i zero residus QA. El nou frontend de recuperació personal i el rebranding encara no estan publicats. API-Football continua desactivada i no s’ha utilitzat en aquesta validació.
 
 ## Arquitectura demo i Supabase
 
