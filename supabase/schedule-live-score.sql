@@ -1,4 +1,4 @@
--- Porra Live v1 no activa cap cron ni consumeix API-Football automàticament.
+-- Porra JARVIS v1 no activa cap cron ni consumeix API-Football automàticament.
 --
 -- La sincronització és opcional i es configura per porra mitjançant
 -- match_states.provider_fixture_id. Abans de programar-la en una versió futura:

@@ -1,6 +1,6 @@
 # Sincronització desactivada amb API-Football
 
-Aquesta Edge Function es conserva únicament com a referència local. Per a la beta de Porra Live està completament desactivada: no es desplega, no s’invoca, no té cron i no se’n configuren secrets.
+Aquesta Edge Function es conserva únicament com a referència local. Per a la beta de Porra JARVIS està completament desactivada: no es desplega, no s’invoca, no té cron i no se’n configuren secrets.
 
 La funció no busca ni inventa partits. Cal configurar explícitament l’identificador `fixtureId` d’API-Football per a cada porra i invocar-la amb:
 

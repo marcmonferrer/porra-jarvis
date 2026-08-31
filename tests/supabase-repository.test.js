@@ -110,8 +110,9 @@ test("l'estat públic sempre es torna a carregar mitjançant la RPC sanejada", a
   }]);
 });
 
-test("la reserva Supabase envia la invitació només a la RPC de quatre arguments", async () => {
+test("la reserva Supabase usa la RPC de recuperació amb capacitat opcional", async () => {
   const invitationToken = "b".repeat(64);
+  const recoveryToken = "c".repeat(64);
   const response = {
     token: "tracking-token",
     bets: [{ cellKey: "1-0" }],
@@ -123,21 +124,43 @@ test("la reserva Supabase envia la invitació només a la RPC de quatre argument
     pool: { status: "open", closesAt: "2099-01-01T00:00:00.000Z" },
     match: { phase: "pre" }
   });
-  const result = await repository.createReservation({
+
+  await repository.createReservation({
     poolId: "pool-beta",
     name: "Participant sintètic",
     cellKeys: ["1-0"],
     invitationToken
   });
-  assert.deepEqual(client.calls, [{
-    name: "create_public_reservation",
-    args: {
-      target_pool_id: "pool-beta",
-      participant_name: "Participant sintètic",
-      selected_cells: ["1-0"],
-      invitation_token: invitationToken
+  const result = await repository.createReservation({
+    poolId: "pool-beta",
+    name: "Participant sintètic",
+    cellKeys: ["2-0"],
+    invitationToken,
+    recoveryToken
+  });
+
+  assert.deepEqual(client.calls, [
+    {
+      name: "create_public_reservation_with_recovery",
+      args: {
+        target_pool_id: "pool-beta",
+        participant_name: "Participant sintètic",
+        selected_cells: ["1-0"],
+        invitation_token: invitationToken,
+        existing_recovery_token: null
+      }
+    },
+    {
+      name: "create_public_reservation_with_recovery",
+      args: {
+        target_pool_id: "pool-beta",
+        participant_name: "Participant sintètic",
+        selected_cells: ["2-0"],
+        invitation_token: invitationToken,
+        existing_recovery_token: recoveryToken
+      }
     }
-  }]);
+  ]);
   assert.equal(result.token, "tracking-token");
   assert.equal(result.paymentInstructions, "Instruccions privades");
 });

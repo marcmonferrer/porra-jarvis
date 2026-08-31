@@ -1,6 +1,6 @@
-# Backend Supabase de Porra Live
+# Backend Supabase de Porra JARVIS
 
-Les migracions versionades defineixen el backend compartit de Porra Live. Les nou migracions estan aplicades i validades a `porra-live-beta`: l’historial local i remot està alineat 9/9 i no hi ha cap migració pendent.
+Les migracions versionades defineixen el backend compartit de Porra JARVIS. Les onze migracions estan aplicades i validades a `porra-live-beta`: l’historial local i remot està alineat 11/11, sense migracions pendents.
 
 ## Estat de migracions
 
@@ -15,8 +15,10 @@ Les migracions versionades defineixen el backend compartit de Porra Live. Les no
 | `migrations/20260828195016_add_reusable_pool_share_links.sql` | `20260828195016` | Afegeix un únic enllaç reutilitzable per porra, rotació, revocació i comptador d’usos sense exposar el secret. |
 | `migrations/20260828200050_add_complete_configurable_pool_rules.sql` | `20260828200050` | Afegeix nota i contacte opcionals i amplia la projecció pública sanejada de les regles. |
 | `migrations/20260828204032_fix_pool_share_link_status_lookup.sql` | `20260828204032` | Repara additivament la consulta d’estat de l’enllaç compartit i preserva autorització, contracte i permisos mínims. |
+| `migrations/20260830084619_add_personal_bet_recovery_links.sql` | `20260830084619` | Afegeix capacitats privades de 256 bits per recuperar «La meva aposta» sense compte i conserva el tracking legacy. |
+| `migrations/20260830093744_fix_personal_recovery_error_order.sql` | `20260830093744` | Reordena la validació de la capacitat personal per conservar l’error genèric sense filtrar l’existència ni el límit del participant. |
 
-Els nou contractes formen part de l’historial actiu de `porra-live-beta`, sense drift ni migracions pendents. L’activació d’aquests contractes no implica que el frontend d’aquesta versió ja estigui publicat a GitHub Pages.
+Els onze contractes remots formen part de l’historial actiu de `porra-live-beta`, sense drift ni migracions pendents, i la UI d’enllaç reutilitzable i regles ja és a la versió publicada. El backend de recuperació personal està actiu i validat, incloses les tres curses formals de concurrència amb integritat correcta i zero residus QA. El nou frontend de recuperació personal i el rebranding encara no estan publicats. API-Football continua desactivada i no s’ha utilitzat en aquesta validació.
 
 ## Arquitectura demo i Supabase
 
@@ -51,6 +53,12 @@ Públiques:
 - `create_public_reservation(target_pool_id, participant_name, selected_cells, invitation_token)`: reserva transaccional amb invitació individual, bloquejos per casella, límits de capacitat, tancament i fase. La resposta conserva el token de tracking i les instruccions de pagament privades.
 - `get_public_pool_state`: estat sanejat sense UUID, tracking, correu, telèfon, instruccions de pagament ni reserves pendents identificables.
 - `get_tracking_state`: estat individual protegit pel token aleatori; a la base només se’n conserva el hash SHA-256.
+
+Quan s’activi la migració local nova, `anon` i `authenticated` també podran executar `get_personal_bet_state(pool_identifier, raw_recovery_token)`. Aquesta RPC read-only exigeix una capacitat hexadecimal lowercase de 64 caràcters, en compara només el SHA-256 i projecta exclusivament la participació vinculada. La taula `private.participant_recovery_tokens` manté RLS activat, zero polítiques i zero grants directes. No hi ha backfill: `get_tracking_state` conserva íntegrament els participants anteriors.
+
+La capacitat personal no és una invitació. `#invite=` continua sent l’única autorització per crear una reserva; `#mybet=` només recupera una reserva existent. La creació del participant, la capacitat personal, les apostes i l’ús de la invitació comparteixen la mateixa transacció, de manera que qualsevol error posterior ho reverteix tot.
+
+`create_public_reservation_with_recovery` té un nom únic i rep la capacitat personal opcional. La primera reserva crea participant i token; una reserva posterior amb el token vàlid reutilitza el mateix participant, no genera ni retorna cap altre secret i queda subjecta al límit total de dues apostes. La RPC històrica de quatre arguments es conserva com a wrapper compatible per a primeres reserves, però rebutja una segona reserva nova si existeix una capacitat activa i el client no la presenta.
 
 Administratives i atòmiques:
 
@@ -157,4 +165,4 @@ El frontend està configurat únicament amb la URL i la clau publishable de `por
 
 Les RPC noves exigeixen `private.require_porra_admin()`, `search_path = ''`, noms qualificats, revocació explícita i `EXECUTE` només per `authenticated`. La taula privada continua sense grants directes. El token de 256 bits només es retorna al crear o rotar, la base desa SHA-256, i ús, rotació, límit per nom normalitzat i capacitat de casella es resolen dins de la transacció.
 
-La projecció pública nova només inclou nota i contacte explícitament configurats; no exposa hashes, tokens, instruccions de pagament, UUID ni dades de participants. Les tres migracions d’aquesta secció estan aplicades i validades a `porra-live-beta`; el frontend corresponent continua pendent de la publicació actual a GitHub.
+La projecció pública nova només inclou nota i contacte explícitament configurats; no exposa hashes, tokens, instruccions de pagament, UUID ni dades de participants. Les tres migracions d’aquesta secció estan aplicades i validades a `porra-live-beta`, i el frontend corresponent ja forma part de la versió publicada.
