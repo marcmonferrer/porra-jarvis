@@ -5,7 +5,7 @@ import test from "node:test";
 const repair = readFileSync(
   new URL("../supabase/migrations/20260830093744_fix_personal_recovery_error_order.sql", import.meta.url),
   "utf8"
-);
+).replace(/\r\n/g, "\n");
 
 function repairedReservation() {
   const start = repair.indexOf("create or replace function public.create_public_reservation_with_recovery(");

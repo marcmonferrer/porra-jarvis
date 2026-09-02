@@ -160,16 +160,11 @@ Les migracions `20260830084619_add_personal_bet_recovery_links.sql` i `202608300
 4. Rollback i les tres curses formals de concurrència estan validats amb zero residus sintètics; els advisors no mostren cap regressió bloquejant de la funcionalitat.
 5. El pas pendent és publicar el frontend i provar la recuperació en el mateix navegador i en un altre dispositiu. API-Football continua desactivada i no s’ha utilitzat en aquesta validació.
 
-### Canvi de nom extern pendent
+### Ruta pública i compatibilitat
 
-La identitat de producte és **Porra JARVIS**, però aquesta fase conserva el repositori `marcmonferrer/finalissima-porra`, el remote Git existent i la ruta pública `https://marcmonferrer.github.io/finalissima-porra/`. En una versió futura i separada:
+El repositori principal és `marcmonferrer/porra-jarvis` i la ruta canònica és `https://marcmonferrer.github.io/porra-jarvis/`. Els nous enllaços d’invitació, compartició i recuperació deriven sempre de la ruta carregada i, per tant, utilitzen `/porra-jarvis/`.
 
-1. reservar i validar el slug desitjat `porra-jarvis`;
-2. inventariar enllaços del portfolio, README, invitacions guardades i metadades socials;
-3. preparar compatibilitat per als enllaços antics —redirect explícit o domini estable— abans de canviar la URL de GitHub Pages;
-4. reanomenar el repositori a GitHub, actualitzar el remote local i verificar clone/fetch/push;
-5. actualitzar la base de Pages, el canonical, el social card i els enllaços del portfolio/README;
-6. provar tant la URL nova com el comportament de tots els enllaços antics abans de retirar cap compatibilitat.
+El repositori mínim `marcmonferrer/finalissima-porra` manté la URL anterior com a capa de compatibilitat. La redirecció estàtica usa `location.replace`, política `no-referrer` i conserva rutes, query parameters i fragments —incloses invitacions i capacitats de recuperació— sense analytics, persistència ni logging.
 
 ## Regles de preus i capacitat
 

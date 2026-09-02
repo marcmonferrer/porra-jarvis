@@ -29,10 +29,10 @@ function browser(hash, search = "?pool=barca-athletic") {
   return {
     location: {
       origin: "https://example.test",
-      pathname: "/finalissima-porra/",
+      pathname: "/porra-jarvis/",
       search,
       hash,
-      href: `https://example.test/finalissima-porra/${search}${hash}`
+      href: `https://example.test/porra-jarvis/${search}${hash}`
     },
     history: { replaceState(...args) { calls.push(args); } },
     calls
@@ -48,8 +48,8 @@ test("genera exactament 256 bits amb una font criptogràfica", () => {
 });
 
 test("l’enllaç personal posa la capacitat només al fragment", () => {
-  const url = buildPersonalBetUrl({ baseUrl: "https://example.test/finalissima-porra/?old=1#public", poolSlug: "barca-athletic", recoveryToken: token });
-  assert.equal(url, `https://example.test/finalissima-porra/?pool=barca-athletic#mybet=${token}`);
+  const url = buildPersonalBetUrl({ baseUrl: "https://marcmonferrer.github.io/porra-jarvis/?old=1#public", poolSlug: "barca-athletic", recoveryToken: token });
+  assert.equal(url, `https://marcmonferrer.github.io/porra-jarvis/?pool=barca-athletic#mybet=${token}`);
   assert.doesNotMatch(new URL(url).search, new RegExp(token));
 });
 
@@ -60,7 +60,7 @@ test("un altre dispositiu captura, desa i elimina immediatament el fragment", ()
   assert.equal(captured.valid, true);
   assert.equal(captured.token, token);
   assert.equal(captured.access.get("barca-athletic"), token);
-  assert.deepEqual(state.calls, [[{ navigation: true }, "", "/finalissima-porra/?pool=barca-athletic#tracking"]]);
+  assert.deepEqual(state.calls, [[{ navigation: true }, "", "/porra-jarvis/?pool=barca-athletic#tracking"]]);
   assert.doesNotMatch(state.calls[0][2], new RegExp(token));
 });
 
@@ -92,7 +92,7 @@ test("els enllaços legacy es capturen i deixen d’exposar ?track=", () => {
   const state = browser("#tracking", `?pool=barca-athletic&track=${legacy}`);
   const captured = capturePersonalBetAccessFromUrl({ ...state, storage: memoryStorage() });
   assert.equal(captured.legacyToken, legacy);
-  assert.deepEqual(state.calls, [[{ navigation: true }, "", "/finalissima-porra/?pool=barca-athletic#tracking"]]);
+  assert.deepEqual(state.calls, [[{ navigation: true }, "", "/porra-jarvis/?pool=barca-athletic#tracking"]]);
 });
 
 test("el camp manual accepta URL personal, token contextual i tracking legacy", () => {

@@ -15,6 +15,7 @@ const legacySchedule = read("supabase/schedule-live-score.sql");
 const packageJson = JSON.parse(read("package.json"));
 const packageLock = JSON.parse(read("package-lock.json"));
 const repository = read("src/repository.js");
+const compatibilityRedirect = read("compat/finalissima-porra/redirect.js");
 
 test("Porra JARVIS i PJ apareixen a totes les superfícies actives de producte", () => {
   assert.match(index, /<title>Porra JARVIS ·/);
@@ -45,11 +46,13 @@ test("el paquet adopta el nom de producte sense canviar identificadors d’infra
   assert.match(repository, /porra-live-\$\{poolSlug\}/);
 });
 
-test("la ruta publicada actual es conserva i el canvi extern queda documentat", () => {
-  assert.match(index, /marcmonferrer\.github\.io\/finalissima-porra\/social-card-porra-live\.png/);
+test("la ruta canònica és porra-jarvis i la compatibilitat antiga queda documentada", () => {
+  assert.match(index, /rel="canonical" href="https:\/\/marcmonferrer\.github\.io\/porra-jarvis\/"/);
+  assert.match(index, /property="og:url" content="https:\/\/marcmonferrer\.github\.io\/porra-jarvis\/"/);
+  assert.match(index, /marcmonferrer\.github\.io\/porra-jarvis\/social-card-porra-live\.png/);
+  assert.match(readme, /marcmonferrer\/porra-jarvis/);
+  assert.match(readme, /https:\/\/marcmonferrer\.github\.io\/porra-jarvis\//);
   assert.match(readme, /marcmonferrer\/finalissima-porra/);
-  assert.match(readme, /https:\/\/marcmonferrer\.github\.io\/finalissima-porra\//);
-  assert.match(readme, /slug desitjat `porra-jarvis`/);
-  assert.match(readme, /redirect explícit o domini estable/);
-  assert.match(readme, /portfolio\/README/);
+  assert.match(readme, /query parameters i fragments/);
+  assert.match(compatibilityRedirect, /marcmonferrer\.github\.io\/porra-jarvis/);
 });

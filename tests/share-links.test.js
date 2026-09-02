@@ -7,8 +7,8 @@ const escapeHtml = value => String(value);
 const formatDateTime = value => value;
 
 test("l’enllaç compartit conserva el token només al fragment", () => {
-  const url = buildPoolShareUrl({ baseUrl: "https://example.test/app/", poolSlug: "final", shareToken: token });
-  assert.equal(url, `https://example.test/app/?pool=final#invite=${token}`);
+  const url = buildPoolShareUrl({ baseUrl: "https://marcmonferrer.github.io/porra-jarvis/", poolSlug: "final", shareToken: token });
+  assert.equal(url, `https://marcmonferrer.github.io/porra-jarvis/?pool=final#invite=${token}`);
 });
 
 test("l’estat recarregat no pot recuperar el token cru", () => {

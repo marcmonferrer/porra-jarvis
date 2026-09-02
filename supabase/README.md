@@ -154,7 +154,7 @@ La passada amb dades exclusivament sintètiques confirma:
 3. Confirmar còpia i compartició per WhatsApp, consum únic, tracking i instruccions de pagament des de navegadors separats.
 4. Repetir la validació completa abans d’un desplegament públic.
 
-El frontend està configurat únicament amb la URL i la clau publishable de `porra-live-beta`; durant aquesta integració de prèvia no s’han creat usuaris ni dades, i el mòdul nou no s’ha desplegat. `finalissima-porra` queda fora d’aquest flux.
+El frontend està configurat únicament amb la URL i la clau publishable de `porra-live-beta`. El canvi de ruta pública a `marcmonferrer/porra-jarvis` no modifica Auth, RLS, RPC, migracions ni dades: l’administració usa autenticació amb contrasenya i no necessita cap redirect OAuth nou.
 
 
 ## Contractes actius a beta: enllaç compartit i regles

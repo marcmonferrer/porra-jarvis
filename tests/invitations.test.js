@@ -17,7 +17,7 @@ const token = "a".repeat(64);
 function browserUrl(hash) {
   const calls = [];
   return {
-    location: { pathname: "/porra-live/", search: "?pool=beta", hash },
+    location: { pathname: "/porra-jarvis/", search: "?pool=beta", hash },
     history: {
       state: { navigation: true },
       replaceState(...args) { calls.push(args); }
@@ -32,7 +32,7 @@ test("captura el fragment d'invitació en memòria i neteja immediatament l'URL"
   assert.equal(invitation.detected, true);
   assert.equal(invitation.valid, true);
   assert.equal(invitation.value(), token);
-  assert.deepEqual(browser.calls, [[{ navigation: true }, "", "/porra-live/?pool=beta"]]);
+  assert.deepEqual(browser.calls, [[{ navigation: true }, "", "/porra-jarvis/?pool=beta"]]);
   invitation.clear();
   assert.equal(invitation.value(), null);
 });
@@ -62,12 +62,12 @@ test("una URL sense invitació no altera la navegació ni crea cap capacitat", (
 
 test("el token només apareix al fragment de l'enllaç de participació", () => {
   const invitationUrl = buildInvitationUrl({
-    baseUrl: "https://example.test/porra-live/?old=value#admin",
+    baseUrl: "https://marcmonferrer.github.io/porra-jarvis/?old=value#admin",
     poolSlug: "beta-final",
     invitationToken: token
   });
   const parsed = new URL(invitationUrl);
-  assert.equal(parsed.pathname, "/porra-live/");
+  assert.equal(parsed.pathname, "/porra-jarvis/");
   assert.equal(parsed.searchParams.get("pool"), "beta-final");
   assert.equal(parsed.search.includes(token), false);
   assert.equal(parsed.hash, `#invite=${token}`);
