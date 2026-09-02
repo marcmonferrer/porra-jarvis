@@ -4,9 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex,follow">
+  <meta name="referrer" content="no-referrer">
   <title>Porra JARVIS</title>
-  <meta http-equiv="refresh" content="0;url=./">
-  <script>window.location.replace('./');</script>
+  <script>
+    const target = new URL("./", window.location.href);
+    target.search = window.location.search;
+    target.hash = window.location.hash;
+    window.location.replace(target.toString());
+  </script>
 </head>
 <body><p><a href="./">Obrir Porra JARVIS</a></p></body>
 </html>
