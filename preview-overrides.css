@@ -1,0 +1,8 @@
+.manual-preview-team {
+  border-top: 1px solid var(--line);
+  box-shadow: 0 8px 20px rgba(21, 42, 77, .04);
+}
+
+.manual-preview-team.preview-team--away {
+  border-top-color: var(--line);
+}
