@@ -53,7 +53,7 @@ a { color: inherit; }
 .versus { position: relative; z-index: 1; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 22px; max-width: 780px; margin: auto; }
 .versus > span { color: #75a7ff; font-size: 1.2rem; font-weight: 900; }
 .team { display: grid; justify-items: center; gap: 6px; text-align: center; }
-.team img, .team-fallback { display: grid; width: 72px; height: 72px; object-fit: contain; place-items: center; border: 1px solid rgba(255,255,255,.2); border-radius: 22px; background: rgba(255,255,255,.1); font-weight: 900; }
+.team img, .team-fallback { display: grid; width: 72px; height: 72px; object-fit: contain; place-items: center; border: 0; border-radius: 0; background: transparent; box-shadow: none; font-weight: 900; }
 .team strong { font-size: clamp(1.05rem, 3vw, 1.45rem); }
 .team small { color: #aebbd0; }
 .close-note { position: relative; z-index: 1; margin: 24px 0 0; color: #c4d0e3; text-align: center; }
@@ -282,7 +282,7 @@ td:last-child { display: flex; gap: 6px; }
 .preview-teams { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: stretch; gap: 16px; }
 .preview-team { min-width: 0; padding: 18px; border: 1px solid var(--line); border-radius: 18px; background: rgba(255,255,255,.86); }
 .preview-team__identity { display: flex; align-items: center; gap: 12px; }
-.preview-team__identity img, .preview-crest { display: grid; width: 48px; height: 48px; flex: 0 0 48px; object-fit: contain; place-items: center; border-radius: 14px; background: #eef3fb; }
+.preview-team__identity img, .preview-crest { display: grid; width: 48px; height: 48px; flex: 0 0 48px; object-fit: contain; place-items: center; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
 .preview-team__identity span { color: var(--muted); font-size: .68rem; font-weight: 850; text-transform: uppercase; letter-spacing: .06em; }
 .preview-team__identity h3 { overflow-wrap: anywhere; margin: 2px 0 0; }
 .preview-versus { align-self: center; color: var(--blue); font-size: .78rem; font-weight: 900; }
