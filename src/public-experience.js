@@ -36,8 +36,8 @@ export function finalResultCellState(match, cellKey) {
 
 export function publicPhasePresentation(match) {
   if (match?.phase === "final") return { heading: "FINAL", eyebrow: "Resultat definitiu", showMinute: false };
-  if (match?.phase === "half") return { heading: "Descans", eyebrow: "Seguiment en directe", showMinute: true };
-  return { heading: "Partit en curs", eyebrow: "Seguiment en directe", showMinute: true };
+  if (match?.phase === "half") return { heading: "Descans", eyebrow: "Seguiment del partit", showMinute: true };
+  return { heading: "Partit en curs", eyebrow: "Seguiment del partit", showMinute: true };
 }
 
 export function showPublicLiveScorebar(match) {

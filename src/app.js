@@ -327,6 +327,7 @@ function liveMarkup(state) {
     <div><span class="live-dot ${["first", "second"].includes(match.phase) ? "active" : ""}"></span><strong>${phases[match.phase] || match.phase}</strong><small>${presentation.showMinute && match.minute ? `Minut ${match.minute}` : ""}</small></div>
     <div class="live-score"><span>${escapeHtml(pool.homeTeam)}</span><strong>${match.currentHome} – ${match.currentAway}</strong><span>${escapeHtml(pool.awayTeam)}</span></div>
     <div class="live-results"><span>Descans: ${match.halfHome == null ? "—" : `${match.halfHome}–${match.halfAway}`}</span><span>Final: ${match.finalHome == null ? "—" : `${match.finalHome}–${match.finalAway}`}</span></div>
+    <p class="live-manual-note">Marcador actualitzat manualment. Actualitzacions aproximadament cada <span>15–20 minuts</span>.</p>
   </section>`;
 }
 
