@@ -199,13 +199,14 @@ test("sense guanyador final redistribueix segons el motor existent", () => {
   assert.match(summary.final.ruleText, /redistribueix/);
 });
 
-test("sense cap guanyador el resum final manté el pot acumulat", () => {
+test("sense cap guanyador el resum indica que no s'assigna cap premi i preserva el càlcul intern", () => {
   const bets = [bet("no-winner", "p1", "0-0")];
   const summary = finalSummaryState({ pool, bets, participants: [participant("p1", "Sense premi")], match: finalMatch({ specialStatuses: { "3-3": "failed", "3-4": "failed", "4-3": "failed", "4-4": "failed" } }) });
   assert.equal(summary.final.winners.length, 0);
   assert.equal(summary.result.carryoverCents, summary.result.totalPotCents);
+  assert.equal(summary.result.totalPotCents - summary.result.carryoverCents, 0);
   assert.equal(summary.participants.length, 0);
-  assert.match(summary.final.ruleText, /pot queda acumulat/);
+  assert.match(summary.final.ruleText, /no s'assigna cap premi/);
 });
 
 test("el resum final integra descans, resultat final, especials i totals per participació", () => {

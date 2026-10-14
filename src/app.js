@@ -238,7 +238,7 @@ function finalSummaryMarkup(state) {
   const labels = { half: "Descans", final: "Resultat final", special: "Especials", "final-redistribution": "Redistribució" };
   const totals = summary.participants.length
     ? summary.participants.map(participant => `<article><div><strong>${escapeHtml(participant.name)}</strong><b>${formatMoney(participant.totalCents)}</b></div><p>${Object.entries(participant.breakdown).map(([category, cents]) => `${labels[category] || category}: ${formatMoney(cents)}`).join(" · ")}</p></article>`).join("")
-    : `<div class="empty-inline">No hi ha cap participació guanyadora. El pot queda acumulat segons les regles actuals.</div>`;
+    : `<div class="empty-inline">No hi ha cap participació guanyadora. No s'assigna cap premi.</div>`;
   return `<section class="final-summary panel" aria-labelledby="final-title">
     <div class="final-result"><span>FINAL</span><h2 id="final-title">${escapeHtml(state.pool.homeTeam)} <strong>${score}</strong> ${escapeHtml(state.pool.awayTeam)}</h2></div>
     <div class="final-main-winner">${publicWinnerList(finalTitle, summary.final.winners, "No hi ha cap aposta guanyadora del resultat final")}<p class="final-rule">${escapeHtml(summary.final.ruleText)}</p></div>

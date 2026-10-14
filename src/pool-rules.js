@@ -66,7 +66,7 @@ export function buildPoolRules(pool = {}) {
     `Distribució configurada: descans ${prize.half}%, resultat final ${prize.final}% i especials ${prize.special}%.`,
     "Si una categoria té més d’una aposta guanyadora, el seu import es reparteix a parts iguals entre les apostes.",
     "Les apostes pendents, no verificades o alliberades no entren al pot confirmat ni poden guanyar.",
-    "Si descans o especials no tenen guanyador, la seva part passa al resultat final. Si no hi ha guanyador final, aquesta part es reparteix entre els guanyadors de descans i especials; si no hi ha cap guanyador, tot queda acumulat.",
+    "Si descans o especials no tenen guanyador, la seva part passa al resultat final. Si no hi ha guanyador final, aquesta part es reparteix entre els guanyadors de descans i especials; si no hi ha cap guanyador en cap categoria, no s'assigna cap premi.",
     specialNames.length ? `Apostes especials: ${specialNames.join("; ")}.` : "Aquesta porra no té apostes especials configurades.",
     "L’administrador bloqueja les entrades, actualitza el marcador i les especials durant el partit i finalitza els premis quan el resultat és complet.",
     "Per al repartiment, és autoritatiu el resultat oficial registrat per l’administrador, aplicat de manera coherent a totes les participacions."

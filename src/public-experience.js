@@ -114,7 +114,7 @@ export function finalSummaryState(state) {
   const redistributed = result.allocations.finalAvailable > result.allocations.finalBase;
   let finalRuleText = "La franja del resultat final s'ha repartit entre les apostes pagades guanyadores.";
   if (finalWinners.length && redistributed) finalRuleText = "La franja del resultat final incorpora la redistribució prevista per les categories sense guanyador.";
-  if (!finalWinners.length && result.carryoverCents > 0) finalRuleText = "Com que no hi ha cap aposta guanyadora en cap categoria, el pot queda acumulat segons les regles actuals.";
+  if (!finalWinners.length && result.carryoverCents > 0) finalRuleText = "Com que no hi ha cap aposta guanyadora en cap categoria, no s'assigna cap premi.";
   else if (!finalWinners.length) finalRuleText = "La franja del resultat final es redistribueix entre les apostes guanyadores del descans i les especials segons les regles actuals.";
   return {
     complete: true,
