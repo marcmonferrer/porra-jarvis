@@ -40,6 +40,15 @@ function initialData() {
   return { pools: [], participants: [], bets: [], matches: {}, prizeResults: {} };
 }
 
+function publicParticipationsFor(poolId, participants, bets) {
+  return participants.filter(person => person.poolId === poolId && !person.archivedAt)
+    .map(person => ({
+      name: person.name,
+      cellKeys: bets.filter(bet => bet.poolId === poolId && bet.participantId === person.id
+        && ["pending", "paid"].includes(bet.paymentStatus)).map(bet => bet.cellKey)
+    })).filter(person => person.cellKeys.length);
+}
+
 function trackingToken() {
   return globalThis.crypto?.randomUUID?.().replaceAll("-", "")
     || `${Date.now()}${Math.random().toString(36).slice(2)}`;
@@ -163,6 +172,7 @@ export class DemoRepository {
       pool,
       bets,
       participants,
+      publicParticipations: publicParticipationsFor(pool.id, participants, bets),
       match: this.data.matches[pool.id],
       prizeResult: this.data.prizeResults[pool.id] || null,
       metrics: poolMetrics(pool, bets)
@@ -567,7 +577,10 @@ export class SupabaseRepository {
       carryoverCents: prizeResult.data.carryover_cents,
       awards: [...groupedAwards.values()]
     } : null;
-    return { pool, bets, participants, match, prizeResult: savedPrize, metrics: poolMetrics(pool, bets) };
+    const publicParticipants = participants.filter(person =>
+      !participantsResult.data.find(row => row.id === person.id)?.archived_at);
+    return { pool, bets, participants, match, prizeResult: savedPrize, metrics: poolMetrics(pool, bets),
+      publicParticipations: publicParticipationsFor(pool.id, publicParticipants, bets) };
   }
 
   async createReservation({ poolId, name, cellKeys, invitationToken, recoveryToken = "" }) {

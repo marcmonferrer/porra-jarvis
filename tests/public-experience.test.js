@@ -8,12 +8,55 @@ import {
   halfTimeCellState,
   halfTimeOutcome,
   participationState,
+  participantNameWarning,
   publicPhasePresentation,
+  publicParticipationsMarkup,
   showPublicLiveScorebar,
   trackingFinalState,
   trackingHalfTimeState
 } from "../src/public-experience.js";
 import { DemoRepository } from "../src/repository.js";
+
+const escapePublicText = value => String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+
+test("l'avís detecta noms públics coincidents ignorant majúscules i espais repetits", () => {
+  const people = Object.freeze([Object.freeze({ name: "Àlex M.", cellKeys: Object.freeze(["1-0"]) })]);
+  const message = participantNameWarning("  ÀLEX   M.  ", people);
+  assert.match(message, /Aquest nom ja està en ús/);
+  assert.match(message, /altra inicial o un sobrenom/);
+  assert.match(message, /teva participació.*enllaç personal/);
+  assert.deepEqual(people, [{ name: "Àlex M.", cellKeys: ["1-0"] }]);
+});
+
+test("l'avís desapareix amb un nom diferent o buit i no inventa coincidències sense directori", () => {
+  const people = [{ name: "Marc M.", cellKeys: ["2-1"] }];
+  for (const name of ["Marc P.", "Marc M. R.", "", "   "]) assert.equal(participantNameWarning(name, people), "");
+  assert.equal(participantNameWarning("Marc M.", undefined), "");
+  assert.equal(participantNameWarning("Marc M.", []), "");
+});
+
+test("la llista pública no reutilitza noms administratius ni només els guanyadors", () => {
+  assert.equal(publicParticipationsMarkup({
+    participants: [{ id: "private-id", name: "Nom privat" }],
+    winnerParticipations: [{ name: "Guanyador", betIds: ["bet"] }]
+  }, { escapeHtml: escapePublicText }), "");
+});
+
+test("la llista mostra totes les persones, conserva homònims i escapa noms i títols", () => {
+  const publicParticipations = Array.from({ length: 12 }, () => ({ name: "<b>Àlex</b>", cellKeys: ["2-1", "3-3"], token: "secret-synthetic" }));
+  const html = publicParticipationsMarkup({
+    pool: { specials: [{ cellKey: "3-3", title: "<script>Especial</script>" }] }, publicParticipations
+  }, { escapeHtml: escapePublicText });
+  assert.equal((html.match(/class="public-participations__name"/g) || []).length, 12);
+  assert.equal((html.match(/2–1/g) || []).length, 12);
+  assert.match(html, /&lt;b&gt;Àlex&lt;\/b&gt;/);
+  assert.match(html, /&lt;script&gt;Especial&lt;\/script&gt;/);
+  assert.doesNotMatch(html, /<script>|<b>|secret-synthetic/);
+});
+
+test("una llista pública buida té un estat informatiu explícit", () => {
+  assert.match(publicParticipationsMarkup({ publicParticipations: [] }, { escapeHtml: escapePublicText }), /Encara no hi ha participacions/);
+});
 
 const pool = createPool({
   id: "half-pool",

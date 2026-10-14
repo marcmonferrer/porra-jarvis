@@ -209,6 +209,16 @@ Consulta [docs/assisted-manual-match-preview.md](docs/assisted-manual-match-prev
 
 ## Desplegament
 
+### Directori de participacions
+
+La migració `20261014175815_add_public_participations.sql` afegeix `publicParticipations` a `get_public_pool_state`: una entrada per persona amb només `name` i `cellKeys`. Inclou caselles actives pendents i pagades, sense distingir-ne l'estat; exclou les alliberades i les persones arxivades. Conserva els permisos existents i només exposa porres publicades. Els UUID s'utilitzen internament per separar homònims i no formen part del directori públic.
+
+La vista «Qui ha triat què» mostra totes les persones en tres columnes, o dues en mòbil. El formulari suggereix nom i inicial del cognom i informa que el nom i les caselles seran públics. Això no modifica la validació ni garanteix noms únics: el flux existent identifica coincidències pel nom normalitzat i pot rebutjar una entrada sense la capacitat personal adequada. Els noms existents es conserven.
+
+La prova `tests/public-participations.sql` s'executa després de totes les migracions en una base local descartable; fa servir dades sintètiques i acaba amb rollback. La migració està aplicada a `porra-live-beta`, amb la versió local alineada amb el registre remot. La verificació anònima confirma només noms i caselles al directori, RLS activa i permisos d'accés directe intactes. Els advisors de seguretat no presenten troballes noves respecte de l'estat anterior.
+
+El formulari avisa mentre s'escriu si el nom coincideix amb un nom del directori públic, ignorant majúscules i espais repetits. Suggereix una altra inicial o un sobrenom i recorda l'enllaç personal per a una participació pròpia. És un avís informatiu: no modifica ni substitueix les validacions del backend, no consulta noms privats i no canvia participacions existents. Sense el directori públic no es pot anticipar la coincidència; el backend manté els errors i proteccions existents.
+
 El frontend es pot publicar com a web estàtica a GitHub Pages. Abans de desplegar el mode real:
 
 1. Aplica i valida les migracions primer en una base local descartable.

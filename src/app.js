@@ -25,7 +25,9 @@ import {
   halfTimeOutcome,
   halfTimeResultCell,
   participationState,
+  participantNameWarning,
   publicPhasePresentation,
+  publicParticipationsMarkup,
   showPublicLiveScorebar,
   trackingFinalState,
   trackingHalfTimeState
@@ -68,6 +70,7 @@ const repository = await createRepository(config);
 let currentPoolId = new URLSearchParams(location.search).get("pool");
 let view = personalBetCapture.detected ? "tracking" : invitation.detected ? "public" : location.hash.replace("#", "") || "public";
 let selectedCells = [];
+let publicParticipantNames = [];
 let lastRecoveryPoolId = personalBetCapture.poolSlug || currentPoolId || "";
 let lastRecoveryToken = personalBetCapture.token || personalBetCapture.access.get(lastRecoveryPoolId);
 let lastTrackingToken = personalBetCapture.legacyToken;
@@ -277,6 +280,7 @@ function participantInvitationMarkup() {
 async function renderPublic() {
   const pool = await resolveActivePool();
   if (!pool) {
+    publicParticipantNames = [];
     clearRealtime();
     app.innerHTML = `<section class="empty-state panel"><span>⚽</span><h1>Encara no hi ha cap porra publicada</h1><p>L’administrador pot crear la primera porra des del panell d’administració.</p><button class="button primary" data-view="admin">Crear una porra</button></section>`;
     return;
@@ -284,6 +288,7 @@ async function renderPublic() {
   currentPoolId = pool.id;
   ensureRealtime(pool.slug || pool.id);
   const state = await repository.getPoolState(pool.id);
+  publicParticipantNames = state.publicParticipations || [];
   const participation = participationState(state);
   const canPlay = participation.open;
   const displayLiveScorebar = showPublicLiveScorebar(state.match);
@@ -305,7 +310,9 @@ async function renderPublic() {
       <aside class="panel checkout-panel">
         <span class="eyebrow">${canPlay ? "2 · Confirma la participació" : phasePresentation.eyebrow}</span>
         <h2>${canPlay ? "La teva selecció" : phasePresentation.heading}</h2>
-        ${canPlay ? `${participantInvitationMarkup()}<label>Nom del participant<input name="participantName" maxlength="50" autocomplete="name" placeholder="El teu nom"></label>
+        ${canPlay ? `${participantInvitationMarkup()}<label>Nom i inicial del cognom<input name="participantName" maxlength="50" autocomplete="name" placeholder="Ex.: Marc M." aria-describedby="participant-name-help participant-name-warning"></label>
+          <p id="participant-name-help" class="field-help">Fes servir un nom que et distingeixi dels altres. El nom i les caselles triades es mostraran públicament.</p>
+          <p id="participant-name-warning" class="participant-name-warning" role="status" aria-live="polite" hidden></p>
           <div class="selection-summary">${selectedCells.length ? selectedCells.map(key => `<span>${escapeHtml(cellLabel(pool, key))}</span>`).join("") : `<p>Selecciona una o dues caselles diferents.</p>`}</div>
           <dl><div><dt>Cost total</dt><dd>${formatMoney(selectionCost)}</dd></div><div><dt>Destinat al pot</dt><dd>${formatMoney(selectionPool)}</dd></div></dl>
           <button class="button primary wide" data-action="confirm-reservation" ${canSubmitReservation ? "" : "disabled"}>Confirmar apostes</button>
@@ -314,7 +321,8 @@ async function renderPublic() {
         <button class="button secondary wide" type="button" data-action="share-pool">Compartir per WhatsApp</button>
       </aside>
     </div>
-    ${displayLiveScorebar ? liveMarkup(state) : ""}`;
+    ${displayLiveScorebar ? liveMarkup(state) : ""}
+    ${publicParticipationsMarkup(state, { escapeHtml })}`;
 }
 
 function liveMarkup(state) {
@@ -328,6 +336,15 @@ function liveMarkup(state) {
     <div class="live-results"><span>Descans: ${match.halfHome == null ? "—" : `${match.halfHome}–${match.halfAway}`}</span><span>Final: ${match.finalHome == null ? "—" : `${match.finalHome}–${match.finalAway}`}</span></div>
     <p class="live-manual-note">Marcador actualitzat manualment. Actualitzacions aproximadament cada <span>15–20 minuts</span>.</p>
   </section>`;
+}
+
+function updateParticipantNameWarning() {
+  const input = app.querySelector("[name='participantName']");
+  const warning = app.querySelector("#participant-name-warning");
+  if (!input || !warning) return;
+  const message = participantNameWarning(input.value, publicParticipantNames);
+  warning.textContent = message;
+  warning.hidden = !message;
 }
 
 async function confirmReservation() {
@@ -882,6 +899,10 @@ app.addEventListener("click", async event => {
 });
 
 app.addEventListener("input", event => {
+  if (view === "public" && event.target.matches("[name='participantName']")) {
+    updateParticipantNameWarning();
+    return;
+  }
   const manualPreviewInput = event.target.closest("[data-manual-preview-input]");
   if (manualPreviewInput) {
     manualMatchPreviewController.setText(manualPreviewInput.value);

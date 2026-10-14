@@ -44,6 +44,30 @@ export function showPublicLiveScorebar(match) {
   return !["half", "final"].includes(match?.phase);
 }
 
+export function participantNameWarning(name, publicParticipations) {
+  const normalize = value => String(value || "").trim().replace(/\s+/g, " ").toLocaleLowerCase("ca");
+  const normalized = normalize(name);
+  if (!normalized || !Array.isArray(publicParticipations)
+    || !publicParticipations.some(person => normalize(person.name) === normalized)) return "";
+  return "Aquest nom ja està en ús. Si ets una altra persona, afegeix una altra inicial o un sobrenom per distingir-te. Si és la teva participació, utilitza el teu enllaç personal.";
+}
+
+export function publicParticipationsMarkup(state, { escapeHtml }) {
+  if (!Array.isArray(state.publicParticipations)) return "";
+  const people = state.publicParticipations;
+  return `<section class="panel public-participations" aria-labelledby="public-participations-title">
+    <div class="section-heading"><div><h2 id="public-participations-title">Qui ha triat què</h2></div></div>
+    ${people.length ? `<ul class="public-participations__grid">${people.map(person => `<li>
+      <strong class="public-participations__name">${escapeHtml(person.name)}</strong>
+      <ul class="public-participations__choices" aria-label="Caselles triades">${person.cellKeys.map(key => {
+        const special = isSpecialCell(key);
+        const label = special ? state.pool.specials.find(item => item.cellKey === key)?.title || key : key.replace("-", "–");
+        return `<li class="public-participations__choice${special ? " is-special" : ""}">${escapeHtml(label)}</li>`;
+      }).join("")}</ul>
+    </li>`).join("")}</ul>` : `<p class="public-participations__empty">Encara no hi ha participacions per mostrar.</p>`}
+  </section>`;
+}
+
 function publicParticipantForBet({ bet, participants = [], winnerParticipations = [] }) {
   const participant = participants.find(item => item.id === bet?.participantId);
   if (participant) return { key: `participant:${participant.id}`, name: participant.name };
