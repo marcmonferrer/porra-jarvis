@@ -47,10 +47,10 @@ export function buildPoolRules(pool = {}) {
   const maxEntries = Number(pool.maxEntriesPerParticipant || DEFAULT_MAX_ENTRIES);
   const cellCapacity = Number(pool.cellCapacity || DEFAULT_CELL_CAPACITY);
   const organizer = normalizeOrganizerText({ note: pool.organizerNote, contact: pool.organizerContact });
-  const specialNames = (pool.specials || []).map(item => {
+  const specials = (pool.specials || []).map(item => {
     const title = plain(item.title, 100) || item.cellKey;
     const description = plain(item.description, 240);
-    return description ? `${title}: ${description}` : title;
+    return { title, description };
   });
   const items = [
     `Cada aposta costa ${money(pool.priceCents)}.`,
@@ -67,7 +67,6 @@ export function buildPoolRules(pool = {}) {
     "Si una categoria té més d’una aposta guanyadora, el seu import es reparteix a parts iguals entre les apostes.",
     "Les apostes pendents, no verificades o alliberades no entren al pot confirmat ni poden guanyar.",
     "Si descans o especials no tenen guanyador, la seva part passa al resultat final. Si no hi ha guanyador final, aquesta part es reparteix entre els guanyadors de descans i especials; si no hi ha cap guanyador en cap categoria, no s'assigna cap premi.",
-    specialNames.length ? `Apostes especials: ${specialNames.join("; ")}.` : "Aquesta porra no té apostes especials configurades.",
     "L’administrador bloqueja les entrades, actualitza el marcador i les especials durant el partit i finalitza els premis quan el resultat és complet.",
     "Per al repartiment, és autoritatiu el resultat oficial registrat per l’administrador, aplicat de manera coherent a totes les participacions."
   ];
@@ -76,6 +75,7 @@ export function buildPoolRules(pool = {}) {
     summary: `Fins a ${maxEntries} apostes per persona · ${money(pool.priceCents)} cadascuna · tancament ${formatMadridDateTime(pool.closesAt)}.`,
     items,
     organizerNote: organizer.note,
+    specials,
     prizePercentages: prize,
     maxEntries,
     cellCapacity
@@ -89,5 +89,9 @@ export function poolRulesMarkup(pool, { escapeHtml, context = "public" }) {
     <p class="pool-rules__summary">${escapeHtml(model.summary)}</p>
     <ol>${model.items.map(item => `<li>${escapeHtml(item)}</li>`).join("")}</ol>
     ${model.organizerNote ? `<aside class="organizer-note"><strong>Nota de l’organitzador</strong><p>${escapeHtml(model.organizerNote)}</p></aside>` : ""}
+    <section class="pool-rules__specials" aria-labelledby="pool-specials-title-${context}">
+      <h3 id="pool-specials-title-${context}">Caselles especials</h3>
+      ${model.specials.length ? `<dl>${model.specials.map(special => `<div><dt>${escapeHtml(special.title)}</dt><dd>${escapeHtml(special.description || "Sense condició addicional indicada.")}</dd></div>`).join("")}</dl>` : `<p>Aquesta porra no té apostes especials configurades.</p>`}
+    </section>
   </section>`;
 }

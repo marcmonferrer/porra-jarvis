@@ -187,7 +187,6 @@ function gridMarkup(state, interactive = true) {
         <strong>${escapeHtml(cellLabel(pool, key))}</strong>
         ${halfTimeCell.isResult ? `<span class="result-badge" aria-label="Resultat del descans">✓ Descans</span>` : ""}
         ${finalCell.isResult ? `<span class="result-badge final-badge" aria-label="Resultat final">✓ Final</span>` : ""}
-        ${special ? `<small>${escapeHtml(pool.specials.find(item => item.cellKey === key)?.description || "Aposta especial")}</small>` : ""}
         <span class="occupancy-dots" aria-hidden="true"><i class="${occupancy > 0 ? "filled" : ""}"></i><i class="${occupancy > 1 ? "filled" : ""}"></i></span>
         <em>${available === 0 ? "Completa" : `${available} ${available === 1 ? "plaça" : "places"}`}</em>
       </button>`;

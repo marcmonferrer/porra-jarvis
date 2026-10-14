@@ -27,7 +27,7 @@ test("el model deriva preu, límits, capacitat, hora Madrid, premis i especials"
   assert.equal(model.cellCapacity, 2);
   assert.deepEqual(model.prizePercentages, { half: 25, final: 50, special: 25 });
   assert.ok(model.items.some(item => /90 minuts/.test(item)));
-  assert.ok(model.items.some(item => /Primer gol: Marca el local/.test(item)));
+  assert.deepEqual(model.specials, pool.specials.map(({ title, description }) => ({ title, description })));
   assert.ok(model.items.some(item => /pendents.*no verificades.*poden guanyar/.test(item)));
   assert.ok(model.items.some(item => /passa al resultat final/.test(item)));
   assert.ok(model.items.some(item => /Contacte de l’organitzador/.test(item)));
