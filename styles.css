@@ -293,6 +293,11 @@ td:last-child { display: flex; gap: 6px; }
 .toast[data-type="error"] { background: var(--red); }
 .toast.is-visible { opacity: 1; transform: translateY(0); }
 
+.classic-preview-image { width: min(100%, 800px); margin: 20px auto; }
+.classic-preview-image > a { display: block; border-radius: var(--radius); box-shadow: var(--shadow); }
+.classic-preview-image img { display: block; width: 100%; height: auto; border-radius: var(--radius); }
+.classic-preview-image > a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
+.classic-preview-image figcaption { margin-top: 8px; color: var(--muted); font-size: .8rem; text-align: center; }
 .match-preview { margin: 20px 0; border-color: #cddcf6; background: linear-gradient(145deg, #fff 0%, #f6f9ff 100%); }
 .match-preview.is-stale { border-color: #ead59c; background: linear-gradient(145deg, #fff 0%, #fffaf0 100%); }
 .preview-heading { margin-bottom: 14px; }

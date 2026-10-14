@@ -3,12 +3,32 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   createDemoMatchPreview,
+  classicPreviewImageMarkup,
   matchPreviewMarkup,
   previewFreshness
 } from "../src/match-preview.js";
 import { DemoRepository } from "../src/repository.js";
 
 const preview = createDemoMatchPreview({ homeTeam: "Local", awayTeam: "Visitant", matchAt: "2026-08-30T19:00:00.000Z" });
+
+test("la infografia només substitueix la prèvia del Clàssic configurat i permet ampliar-la", async () => {
+  const image = await readFile(new URL("../assets/previa-jarvis-classic-2026.png", import.meta.url));
+  assert.equal(image.subarray(1, 4).toString(), "PNG");
+  assert.equal(image.readUInt32BE(16), 1024);
+  assert.equal(image.readUInt32BE(20), 1536);
+  const pool = { homeTeam: "FC Barcelona", awayTeam: "Real Madrid", matchAt: "2026-10-25T20:00:00Z" };
+  const html = classicPreviewImageMarkup(pool);
+  assert.match(html, /assets\/previa-jarvis-classic-2026\.png/);
+  assert.match(html, /target="_blank" rel="noopener"/);
+  assert.match(html, /width="1024" height="1536"/);
+  assert.match(html, /alt="La prèvia de JARVIS/);
+  assert.doesNotMatch(html, /Esborrany per revisar/);
+  assert.equal(classicPreviewImageMarkup({ ...pool, awayTeam: "Feyenoord" }), "");
+  assert.equal(classicPreviewImageMarkup({ ...pool, homeTeam: "Real Madrid", awayTeam: "FC Barcelona" }), "");
+  assert.equal(classicPreviewImageMarkup({ ...pool, matchAt: "2027-10-25T20:00:00Z" }), "");
+  assert.equal(classicPreviewImageMarkup({ ...pool, matchAt: "invalid" }), "");
+  assert.equal(classicPreviewImageMarkup(), "");
+});
 
 test("sense snapshot la vista pública no mostra cap contenidor buit", () => {
   assert.equal(matchPreviewMarkup(null), "");

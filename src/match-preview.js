@@ -1,5 +1,22 @@
 const STALE_AFTER_MS = 6 * 60 * 60 * 1000;
 
+export function classicPreviewImageMarkup(pool = {}) {
+  const matchDate = new Date(pool.matchAt);
+  if (!pool.matchAt || Number.isNaN(matchDate.getTime())
+    || pool.homeTeam !== "FC Barcelona" || pool.awayTeam !== "Real Madrid") return "";
+  const parts = new Intl.DateTimeFormat("en", {
+    timeZone: "Europe/Madrid", year: "numeric", month: "2-digit", day: "2-digit"
+  }).formatToParts(matchDate);
+  const date = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  if (`${date.year}-${date.month}-${date.day}` !== "2026-10-25") return "";
+  return `<figure class="classic-preview-image">
+    <a href="assets/previa-jarvis-classic-2026.png" target="_blank" rel="noopener" aria-label="Obrir la prèvia de JARVIS a mida completa">
+      <img src="assets/previa-jarvis-classic-2026.png" width="1024" height="1536" loading="lazy" decoding="async" alt="La prèvia de JARVIS del Barça–Real Madrid. Infografia dels 20 Clàssics representats amb el Barça local: 7 victòries del Barça, 5 empats i 8 victòries del Madrid; 33 gols del Barça i 36 del Madrid. Marcadors més repetits, sempre Barça–Madrid: 1–2, quatre vegades; 2–1 i 1–3, tres vegades; 1–1 i 2–2, dues vegades. La història dona context. El partit s’ha de jugar.">
+    </a>
+    <figcaption>Obre la imatge per ampliar-la.</figcaption>
+  </figure>`;
+}
+
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>'"]/g, character => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;"

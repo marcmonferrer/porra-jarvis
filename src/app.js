@@ -48,7 +48,7 @@ import {
 } from "./personal-bet-links.js";
 import { createAdminPoolCreationFlow, resolveAdminPoolView } from "./admin-pool-creation.js";
 import { adminShareLinkMarkup, buildPoolShareUrl, copyShareLink } from "./share-links.js";
-import { matchPreviewMarkup } from "./match-preview.js";
+import { classicPreviewImageMarkup, matchPreviewMarkup } from "./match-preview.js";
 import { poolRulesMarkup } from "./pool-rules.js";
 import {
   adminManualMatchPreviewMarkup,
@@ -298,7 +298,7 @@ async function renderPublic() {
   const selectionPool = selectedCells.length * pool.poolPerBetCents;
   const canSubmitReservation = selectedCells.length > 0 && (repository.mode === "demo" || invitation.hasToken());
   const phasePresentation = publicPhasePresentation(state.match);
-  app.innerHTML = `${hero(pool, state.match)}${matchPreviewMarkup(pool.matchPreview, {
+  app.innerHTML = `${hero(pool, state.match)}${classicPreviewImageMarkup(pool) || matchPreviewMarkup(pool.matchPreview, {
     crestUrls: { home: pool.homeImage, away: pool.awayImage },
     teamNames: { home: pool.homeTeam, away: pool.awayTeam }
   })}${poolRulesMarkup(pool, { escapeHtml, context: "public" })}${halfTimeMarkup(state)}${finalSummaryMarkup(state)}${metricsMarkup(state.metrics)}
